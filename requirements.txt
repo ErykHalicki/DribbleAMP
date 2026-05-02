@@ -1,0 +1,3 @@
+mujoco==3.6.0
+mujoco-warp==3.6.0
+newton==1.0.0
