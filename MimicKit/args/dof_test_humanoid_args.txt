@@ -1,0 +1,6 @@
+--num_envs 4
+
+--engine_config data/engines/isaac_gym_engine.yaml
+--env_config data/envs/dof_test_humanoid_env.yaml
+
+--out_dir output/

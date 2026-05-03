@@ -1,0 +1,10 @@
+*.pyc
+
+.vs/
+__pycache__/
+output/
+.vscode/
+wandb/
+
+MimicKit_Data/
+data/MimicKit_Data.zip

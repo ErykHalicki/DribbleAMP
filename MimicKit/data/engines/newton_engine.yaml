@@ -1,0 +1,6 @@
+engine_name: "newton"
+    
+control_mode: "pos"
+control_freq: 30
+sim_freq: 240
+env_spacing: 5

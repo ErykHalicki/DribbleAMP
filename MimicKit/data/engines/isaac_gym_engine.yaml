@@ -1,0 +1,8 @@
+engine_name: "isaac_gym"
+    
+control_mode: "pos"
+control_freq: 30
+sim_freq: 120
+env_spacing: 5
+    
+ground_contact_height: 0.3

@@ -1,0 +1,25 @@
+env_name: "smp"
+
+char_file: "data/assets/humanoid/humanoid.xml"
+camera_mode: "track"
+
+episode_length: 10.0 # seconds
+global_obs: True
+root_height_obs: True
+pose_termination: False
+enable_phase_obs: False
+enable_tar_obs: False
+disc_dof_vel_obs: False
+num_disc_obs_steps: 10
+rand_reset: True
+
+ref_char_offset: [2.0, 0.0, 0.0] # m
+init_pose: [0, 0, 0.882416, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1.5708, 0, 0, 0, -1.5708, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+enable_early_termination: True
+key_bodies: ["head", "right_hand", "left_hand", "right_foot", "left_foot"]
+contact_bodies: ["right_foot", "left_foot"]
+# contact_bodies: ["right_hand", "left_hand", "right_foot", "left_foot"] # cartwheel
+#contact_bodies: [] # roll and crawl
+
+motion_file: "data/motions/humanoid/humanoid_spinkick.pkl"

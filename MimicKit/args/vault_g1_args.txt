@@ -1,0 +1,7 @@
+--num_envs 4096
+
+--engine_config data/engines/isaac_gym_engine.yaml
+--env_config data/envs/vault_g1_env.yaml
+--agent_config data/agents/deepmimic_g1_ppo_agent.yaml
+
+--out_dir output/

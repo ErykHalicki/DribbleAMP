@@ -1,0 +1,12 @@
+env_name: "view_motion"
+
+char_file: "data/assets/smpl/smpl.xml"
+camera_mode: "track"
+
+episode_length: 20.0 # seconds
+global_obs: False
+root_height_obs: True
+
+key_bodies: ["L_Toe", "R_Toe", "Head", "L_Hand", "R_Hand"]
+
+motion_file: "data/motions/smpl/smpl_walk.pkl"

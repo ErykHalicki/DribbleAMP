@@ -1,0 +1,8 @@
+--num_envs 4096
+--visualize false
+
+--engine_config data/engines/isaac_lab_engine.yaml
+--env_config data/envs/smp_location_humanoid_env.yaml
+--agent_config data/agents/smp_task_humanoid_agent.yaml
+
+--out_dir output/smp_location
