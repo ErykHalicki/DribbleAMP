@@ -1,0 +1,9 @@
+<mujoco model="dodgeball">
+	<compiler angle="radian"/>
+	<worldbody>
+		<body name="projectile" pos="0 0 0">
+		<freejoint name="root"/>
+			<geom name="projectile" type="sphere" size="0.1" density="200"/>
+		</body>
+	</worldbody>
+</mujoco>

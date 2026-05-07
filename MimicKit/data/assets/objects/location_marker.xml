@@ -1,0 +1,10 @@
+<mujoco model="location_marker">
+	<compiler angle="radian"/>
+	<worldbody>
+		<body name="marker" pos="0 0 0">
+		<freejoint name="root"/>
+			<geom name="marker0" type="sphere" size="0.1"/>
+			<geom name="marker1" type="box" size="0.025 0.025 1" pos="0 0 1"/>
+		</body>
+	</worldbody>
+</mujoco>

@@ -1,0 +1,9 @@
+<mujoco model="steering_marker">
+	<compiler angle="radian"/>
+	<worldbody>
+		<body name="marker" pos="0 0 0">
+		<freejoint name="root"/>
+			<geom name="marker" type="box" size="0.25 0.025 0.025"/>
+		</body>
+	</worldbody>
+</mujoco>
