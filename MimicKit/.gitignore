@@ -8,3 +8,5 @@ wandb/
 
 MimicKit_Data/
 data/MimicKit_Data.zip
+
+slurm-*.out

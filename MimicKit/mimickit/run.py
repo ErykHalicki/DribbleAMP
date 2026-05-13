@@ -48,12 +48,21 @@ def train(agent, max_samples, out_dir, save_int_models, logger_type):
                       save_int_models=save_int_models, logger_type=logger_type)
     return
 
-def test(agent, test_episodes):
+def test(agent, test_episodes, out_dir):
     result = agent.test_model(num_episodes=test_episodes)
     
     Logger.print("Mean Return: {}".format(result["mean_return"]))
     Logger.print("Mean Episode Length: {}".format(result["mean_ep_len"]))
     Logger.print("Episodes: {}".format(result["num_eps"]))
+
+    diag = agent._env.record_diagnostics()
+    if "sim_recording" in diag:
+        vid = diag["sim_recording"]
+        vid.save(out_dir + "/test_video.mp4")
+        Logger.print("Video saved to " + out_dir + "/test_video.mp4")
+    else:
+        Logger.print("Could not find sim_recording in diagnostics! Keys available: " + str(diag.keys()))
+
     return result
 
 def save_config_files(args, out_dir):
@@ -124,7 +133,7 @@ def run(rank, num_procs, device, master_port, args):
         
     elif (mode == "test"):
         test_episodes = args.parse_int("test_episodes", np.iinfo(np.int64).max)
-        test(agent=agent, test_episodes=test_episodes)
+        test(agent=agent, test_episodes=test_episodes, out_dir=out_dir)
 
     else:
         assert(False), "Unsupported mode: {}".format(mode)
@@ -159,7 +168,8 @@ def main(argv):
     for proc in processes:
         proc.join()
        
-    return
+    import os
+    os._exit(0)
 
 if __name__ == "__main__":
     main(sys.argv)
