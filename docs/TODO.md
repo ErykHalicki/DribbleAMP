@@ -5,4 +5,7 @@
 - run retargetting to get more g1 walking clips
     - the codebase only comes with 2 walking clips for g1
 - train a locomotion only policy and visualize
+    - running on may 7
+    - check on results
+    - visualize output once done
 - test and visualize trained policy
