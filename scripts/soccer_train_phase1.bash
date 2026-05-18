@@ -27,4 +27,4 @@ if [ -f MimicKit/requirements.txt ]; then
 fi
 
 cd "${PROJECT_DIR}/MimicKit"
-python mimickit/run.py --mode train --num_envs 1024 --engine_config data/engines/newton_engine.yaml --env_config data/envs/amp_soccer_humanoid_env_phase1.yaml --agent_config data/agents/amp_task_humanoid_agent.yaml --visualize false --out_dir output/soccer_phase1/ --logger tb
+python -u mimickit/run.py --mode train --num_envs 4096 --engine_config data/engines/newton_engine.yaml --env_config data/envs/amp_soccer_humanoid_env_phase1.yaml --agent_config data/agents/amp_task_humanoid_agent.yaml --visualize false --out_dir output/soccer_phase1/ --logger tb
