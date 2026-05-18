@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --account=digital_human
 #SBATCH --time=24:00:00
-#SBATCH --gres=gpu:5060ti:1
+#SBATCH --gpus=5060ti:1
 #SBATCH --cpus-per-gpu=16
 #SBATCH --mem=24G
 
