@@ -31,4 +31,18 @@ if [ -f MimicKit/requirements.txt ]; then
 fi
 
 cd "${PROJECT_DIR}/MimicKit"
-python -u mimickit/run.py --mode train --num_envs 4096 --engine_config data/engines/newton_engine.yaml --env_config data/envs/amp_soccer_humanoid_env_phase2.yaml --agent_config data/agents/amp_task_humanoid_agent.yaml --model_file "${PHASE1_MODEL}" --visualize false --out_dir output/soccer_phase2/ --logger tb
+
+OUT_DIR=output/soccer_phase2/
+LATEST_INT=$(ls -1 "${OUT_DIR}int_models/"model_*.pt 2>/dev/null | sort | tail -n 1 || true)
+if [ -n "${LATEST_INT}" ]; then
+    RESUME_MODEL="${LATEST_INT}"
+    echo "Resuming phase 2 from intermediate checkpoint ${RESUME_MODEL}"
+elif [ -f "${OUT_DIR}model.pt" ]; then
+    RESUME_MODEL="${OUT_DIR}model.pt"
+    echo "Resuming phase 2 from ${RESUME_MODEL}"
+else
+    RESUME_MODEL="${PHASE1_MODEL}"
+    echo "Starting phase 2 from phase 1 checkpoint ${RESUME_MODEL}"
+fi
+
+python -u mimickit/run.py --mode train --num_envs 1024 --engine_config data/engines/newton_engine.yaml --env_config data/envs/amp_soccer_humanoid_env_phase2.yaml --agent_config data/agents/amp_task_humanoid_agent.yaml --model_file "${RESUME_MODEL}" --visualize false --out_dir "${OUT_DIR}" --logger tb --save_int_models true
