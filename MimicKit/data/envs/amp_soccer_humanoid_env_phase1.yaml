@@ -26,7 +26,7 @@ proj_target_body: "torso"
 ball_spawn_dist_min: 1.0
 ball_spawn_dist_max: 2.0
 ball_spawn_speed_min: 0.0
-ball_spawn_speed_max: 2.0
+ball_spawn_speed_max: 0.0
 
 proj_trigger_time_min: 0.0
 proj_trigger_time_max: 0.0
@@ -38,8 +38,8 @@ tar_change_time_max: 7.0
 
 motion_file: "data/datasets/dataset_humanoid_locomotion.yaml"
 
-# Phase 1: learn to approach the ball. Tiny velocity weight, distance dominates.
-reward_ball_vel_w: 0.05
-reward_ball_dist_w: 0.95
+# Phase 1: stationary ball, learn to approach. Zero velocity weight, distance only.
+reward_ball_vel_w: 0.0
+reward_ball_dist_w: 1.0
 reward_ball_vel_scale: 0.5
 reward_ball_dist_scale: 0.5
