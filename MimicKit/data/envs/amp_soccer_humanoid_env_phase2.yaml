@@ -23,23 +23,23 @@ contact_bodies: ["right_foot", "left_foot"]
 num_projectiles: 1
 proj_target_body: "torso"
 
-ball_spawn_dist_min: 1.0
-ball_spawn_dist_max: 2.0
+ball_spawn_dist_min: 5.0
+ball_spawn_dist_max: 10.0
 ball_spawn_speed_min: 0.0
-ball_spawn_speed_max: 2.0
+ball_spawn_speed_max: 1.0
 
 proj_trigger_time_min: 0.0
 proj_trigger_time_max: 0.0
 
-tar_speed_min: 1.0
+tar_speed_min: 0.0
 tar_speed_max: 4.0
 tar_change_time_min: 4.0
 tar_change_time_max: 7.0
 
 motion_file: "data/datasets/dataset_humanoid_locomotion.yaml"
 
-# Phase 2: ball velocity is the main objective; small distance term kept as residual shaping.
-reward_ball_vel_w: 0.9
-reward_ball_dist_w: 0.1
+# Phase 2: ball velocity is the main objective; distance term kept as residual shaping with flat curve.
+reward_ball_vel_w: 0.5
+reward_ball_dist_w: 0.5
 reward_ball_vel_scale: 0.5
-reward_ball_dist_scale: 0.5
+reward_ball_dist_scale: 0.02
