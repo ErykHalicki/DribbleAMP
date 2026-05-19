@@ -23,8 +23,8 @@ contact_bodies: ["right_foot", "left_foot"]
 num_projectiles: 1
 proj_target_body: "torso"
 
-ball_spawn_dist_min: 1.0
-ball_spawn_dist_max: 2.0
+ball_spawn_dist_min: 5.0
+ball_spawn_dist_max: 10.0
 ball_spawn_speed_min: 0.0
 ball_spawn_speed_max: 0.0
 
@@ -42,4 +42,4 @@ motion_file: "data/datasets/dataset_humanoid_locomotion.yaml"
 reward_ball_vel_w: 0.0
 reward_ball_dist_w: 1.0
 reward_ball_vel_scale: 0.5
-reward_ball_dist_scale: 0.5
+reward_ball_dist_scale: 0.02
