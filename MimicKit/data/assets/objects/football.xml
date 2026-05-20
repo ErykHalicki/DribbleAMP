@@ -1,0 +1,9 @@
+<mujoco model="football">
+        <compiler angle="radian"/>
+        <worldbody>
+                <body name="projectile" pos="0 0 0">
+                <freejoint name="root"/>
+                        <geom name="projectile" type="ellipsoid" size="0.192 0.12 0.12" density="200"/>
+                </body>
+        </worldbody>
+</mujoco>
