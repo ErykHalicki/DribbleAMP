@@ -39,8 +39,8 @@ tar_change_time_max: 7.0
 motion_file: "data/datasets/dataset_humanoid_locomotion.yaml"
 
 # Phase 1: reward kicking the ball (any direction) + staying close. Direction weight 0.
-reward_ball_speed_w: 0.8
+reward_ball_speed_w: 0.2
 reward_ball_dir_w: 0.0
-reward_ball_dist_w: 0.2
+reward_ball_dist_w: 0.8
 reward_ball_speed_scale: 0.5
-reward_ball_dist_scale: 0.02
+reward_ball_dist_scale: 0.1
