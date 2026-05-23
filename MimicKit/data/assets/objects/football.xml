@@ -3,7 +3,7 @@
         <worldbody>
                 <body name="projectile" pos="0 0 0">
                 <freejoint name="root"/>
-                        <geom name="projectile" type="sphere" size="0.11" density="77" friction="1.0 0.05 0.2"/>
+                        <geom name="projectile" type="sphere" size="0.11" density="77" friction="1.0 0.1 0.5"/>
                 </body>
         </worldbody>
 </mujoco>
