@@ -55,7 +55,7 @@ class TaskDodgeballEnv(smp_env.SMPEnv):
         return
 
     def _build_projectile(self, env_id, proj_idx):
-        proj_asset_file = "data/assets/objects/dodgeball.xml"
+        proj_asset_file = "data/assets/objects/football.xml"
         start_pos = np.array([10.0 + proj_idx, 10.0, self._proj_radius], dtype=np.float32)
         start_rot = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
 
