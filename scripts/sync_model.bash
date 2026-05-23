@@ -33,4 +33,12 @@ unset SSHPASS
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 python "${SCRIPT_DIR}/scripts/plot_log.py" output/log.txt
 
+if [[ "${REMOTE_MODEL}" == *soccer_phase2* ]]; then
+    export ENV_CONFIG=data/envs/amp_soccer_humanoid_env_phase2.yaml
+    echo "Testing with phase 2 env config"
+else
+    export ENV_CONFIG=data/envs/amp_soccer_humanoid_env_phase1.yaml
+    echo "Testing with phase 1 env config"
+fi
+
 bash "${SCRIPT_DIR}/scripts/soccer_test.sh"
