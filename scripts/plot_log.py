@@ -27,6 +27,4 @@ for ax, (col, title) in zip(axes.flat, plots):
     ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("training_log.png", dpi=150)
-print("Saved training_log.png")
 plt.show()

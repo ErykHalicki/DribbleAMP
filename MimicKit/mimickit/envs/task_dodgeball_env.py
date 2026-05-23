@@ -8,7 +8,7 @@ import util.torch_util as torch_util
 
 class TaskDodgeballEnv(smp_env.SMPEnv):
     def __init__(self, env_config, engine_config, num_envs, device, visualize, record_video=False):
-        self._proj_radius = 0.1
+        self._proj_radius = 0.11
         self._num_projectiles = int(env_config.get("num_projectiles", 1))
         self._hit_dist = float(env_config.get("hit_dist", 0.8))
         self._hit_force_threshold = float(env_config.get("hit_force_threshold", 0.1))
