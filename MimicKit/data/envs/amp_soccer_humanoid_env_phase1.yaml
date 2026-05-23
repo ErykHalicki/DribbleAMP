@@ -31,15 +31,16 @@ ball_spawn_speed_max: 0.0
 proj_trigger_time_min: 0.0
 proj_trigger_time_max: 0.0
 
-tar_speed_min: 1.0
+tar_speed_min: 0.0
 tar_speed_max: 4.0
 tar_change_time_min: 4.0
 tar_change_time_max: 7.0
 
 motion_file: "data/datasets/dataset_humanoid_locomotion.yaml"
 
-# Phase 1: stationary ball, learn to approach. Zero velocity weight, distance only.
-reward_ball_vel_w: 0.0
-reward_ball_dist_w: 1.0
-reward_ball_vel_scale: 0.5
+# Phase 1: reward kicking the ball (any direction) + staying close. Direction weight 0.
+reward_ball_speed_w: 0.8
+reward_ball_dir_w: 0.0
+reward_ball_dist_w: 0.2
+reward_ball_speed_scale: 0.5
 reward_ball_dist_scale: 0.02

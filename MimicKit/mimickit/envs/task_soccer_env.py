@@ -19,9 +19,10 @@ class TaskSoccerEnv(task_dodgeball_env.TaskDodgeballEnv):
         self._ball_spawn_speed_min = float(env_config.get("ball_spawn_speed_min", 0.0))
         self._ball_spawn_speed_max = float(env_config.get("ball_spawn_speed_max", 2.0))
 
-        self._reward_ball_vel_w = float(env_config.get("reward_ball_vel_w", 0.9))
+        self._reward_ball_speed_w = float(env_config.get("reward_ball_speed_w", 0.45))
+        self._reward_ball_dir_w = float(env_config.get("reward_ball_dir_w", 0.45))
         self._reward_ball_dist_w = float(env_config.get("reward_ball_dist_w", 0.1))
-        self._reward_ball_vel_scale = float(env_config.get("reward_ball_vel_scale", 0.5))
+        self._reward_ball_speed_scale = float(env_config.get("reward_ball_speed_scale", 0.5))
         self._reward_ball_dist_scale = float(env_config.get("reward_ball_dist_scale", 0.5))
 
         super().__init__(env_config=env_config, engine_config=engine_config,
@@ -162,9 +163,10 @@ class TaskSoccerEnv(task_dodgeball_env.TaskDodgeballEnv):
             root_pos=root_pos,
             tar_ball_dir=self._tar_ball_dir,
             tar_ball_speed=self._tar_ball_speed,
-            ball_vel_w=self._reward_ball_vel_w,
+            ball_speed_w=self._reward_ball_speed_w,
+            ball_dir_w=self._reward_ball_dir_w,
             ball_dist_w=self._reward_ball_dist_w,
-            ball_vel_scale=self._reward_ball_vel_scale,
+            ball_speed_scale=self._reward_ball_speed_scale,
             ball_dist_scale=self._reward_ball_dist_scale,
         )
         return
@@ -203,17 +205,25 @@ def compute_soccer_observations(root_pos, root_rot, proj_pos, proj_vel,
 
 @torch.jit.script
 def compute_soccer_reward(proj_pos, proj_vel, root_pos, tar_ball_dir, tar_ball_speed,
-                          ball_vel_w, ball_dist_w, ball_vel_scale, ball_dist_scale):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, float) -> Tensor
-    tar_vel = tar_ball_speed.unsqueeze(-1) * tar_ball_dir
-
+                          ball_speed_w, ball_dir_w, ball_dist_w,
+                          ball_speed_scale, ball_dist_scale):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, float, float) -> Tensor
     ball_vel_xy = proj_vel[..., 0, 0:2]
-    ball_vel_err = torch.sum(torch.square(tar_vel - ball_vel_xy), dim=-1)
-    ball_vel_reward = torch.exp(-ball_vel_scale * ball_vel_err)
+    ball_speed = torch.norm(ball_vel_xy, dim=-1)
+
+    speed_err = torch.square(tar_ball_speed - ball_speed)
+    ball_speed_reward = torch.exp(-ball_speed_scale * speed_err)
+
+    eps = 1e-6
+    ball_vel_norm = ball_vel_xy / torch.clamp_min(ball_speed.unsqueeze(-1), eps)
+    dir_dot = torch.sum(ball_vel_norm * tar_ball_dir, dim=-1)
+    ball_dir_reward = torch.clamp_min(dir_dot, 0.0)
 
     ball_xy = proj_pos[..., 0, 0:2]
     dist_sq = torch.sum(torch.square(ball_xy - root_pos[..., 0:2]), dim=-1)
     ball_dist_reward = torch.exp(-ball_dist_scale * dist_sq)
 
-    reward = ball_vel_w * ball_vel_reward + ball_dist_w * ball_dist_reward
+    reward = (ball_speed_w * ball_speed_reward
+              + ball_dir_w * ball_dir_reward
+              + ball_dist_w * ball_dist_reward)
     return reward
