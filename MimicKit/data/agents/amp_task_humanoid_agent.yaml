@@ -49,5 +49,5 @@ disc_logit_reg: 0.01
 disc_grad_penalty: 5
 disc_reward_scale: 2
 
-task_reward_weight: 0.5
-disc_reward_weight: 0.5
+task_reward_weight: 0.7
+disc_reward_weight: 0.3
