@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 
-import engines.engine as engine
 import envs.smp_env as smp_env
 import envs.task_dodgeball_env as task_dodgeball_env
 import util.torch_util as torch_util
@@ -75,6 +74,32 @@ class TaskSoccerEnv(task_dodgeball_env.TaskDodgeballEnv):
         trigger_ids = trigger_mask.nonzero(as_tuple=False)
         if (trigger_ids.shape[0] > 0):
             self._launch_projectiles(env_ids=trigger_ids[:, 0], proj_ids=trigger_ids[:, 1])
+        return
+
+    def _render_scene(self):
+        super()._render_scene()
+        self._render_tar_velocity_lines()
+        return
+
+    def _render_tar_velocity_lines(self):
+        line_width = 4.0
+        col = np.array([[0.9, 0.2, 0.2, 1.0]], dtype=np.float32)
+
+        proj_pos, _ = self._get_proj_states()
+        ball_xy = proj_pos[:, 0, 0:2].cpu().numpy()
+        tar_dir = self._tar_ball_dir.cpu().numpy()
+        tar_speed = self._tar_ball_speed.cpu().numpy()
+
+        num_envs = self.get_num_envs()
+        for i in range(num_envs):
+            start = np.zeros((1, 3), dtype=np.float32)
+            start[0, 0:2] = ball_xy[i]
+            start[0, 2] = 0.02
+
+            end = start.copy()
+            end[0, 0:2] += tar_speed[i] * tar_dir[i]
+
+            self._engine.draw_lines(i, start, end, col, line_width)
         return
 
     def _launch_projectiles(self, env_ids, proj_ids):
