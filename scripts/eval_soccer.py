@@ -15,7 +15,9 @@ Then reports aggregate metrics:
 Usage:
     .venv/bin/python scripts/eval_soccer.py \
         --model_file output/model.pt \
-        --num_envs 16 --num_steps 2000 \
+        --num_envs 16 \
+        [--steps_per_episode 900 --num_episodes 20] \
+        [--total_steps 5000]   # hard loop cap, overrides the multiply-out
         [--csv output/eval.csv]
 
 Mirrors run.py's setup so the same env / agent / engine configs apply.
@@ -48,17 +50,64 @@ def parse_args():
     p.add_argument("--engine_config", default="data/engines/newton_engine.yaml")
     p.add_argument("--agent_config", default="data/agents/amp_task_humanoid_agent.yaml")
     p.add_argument("--num_envs", type=int, default=1)
-    p.add_argument("--num_steps", type=int, default=600,
-                   help="Steps per episode. 600 @ 30Hz = 20s.")
-    p.add_argument("--num_episodes", type=int, default=20)
-    p.add_argument("--episode_length", type=float, default=20.0,
-                   help="Seconds. Overrides env config so each episode is one fixed direction.")
+    p.add_argument("--steps_per_episode", type=int, default=900,
+                   help="Steps per episode (controls warmup re-trigger). 900 @ 30Hz = 30s.")
+    p.add_argument("--num_episodes", type=int, default=20,
+                   help="Number of episodes. Ignored if --total_steps is set.")
+    p.add_argument("--total_steps", type=int, default=0,
+                   help="If >0, overrides steps_per_episode * num_episodes as the hard loop cap.")
+    p.add_argument("--episode_length", type=float, default=30.0,
+                   help="Seconds. Overrides env config episode duration (controls env-side resets).")
     p.add_argument("--warmup_steps", type=int, default=30,
                    help="Steps to skip after each reset before logging (lets ball settle).")
     p.add_argument("--device", default="cpu")
     p.add_argument("--visualize", action="store_true")
     p.add_argument("--csv", default="", help="Optional path to dump per-step records.")
+    p.add_argument("--ball_spawn_dist", type=float, default=0.4,
+                   help="Eval override: spawn ball this far from agent root, in target direction.")
     return p.parse_args()
+
+
+def install_deterministic_spawn(env, dist):
+    """Replace ball spawn with a fixed offset in the target direction.
+
+    Original `_launch_projectiles` spawns at a random angle/distance around the
+    character. For eval we want the ball always reachable on the first kick, so
+    we place it `dist` meters from the root in the direction the target line
+    points (between the agent and the goal direction).
+    """
+    char_id = env._get_char_id()
+
+    def deterministic_launch(env_ids, proj_ids):
+        n = env_ids.shape[0]
+        if (n == 0):
+            return
+        root_pos = env._engine.get_root_pos(char_id)[env_ids]
+        tar_dir = env._tar_ball_dir[env_ids]
+
+        spawn_pos = torch.zeros([n, 3], device=env._device, dtype=torch.float)
+        spawn_pos[:, 0] = root_pos[:, 0] + dist * tar_dir[:, 0]
+        spawn_pos[:, 1] = root_pos[:, 1] + dist * tar_dir[:, 1]
+        spawn_pos[:, 2] = env._proj_radius
+
+        spawn_vel = torch.zeros([n, 3], device=env._device, dtype=torch.float)
+        spawn_rot = torch.zeros([n, 4], device=env._device, dtype=torch.float)
+        spawn_rot[:, 3] = 1.0
+        spawn_ang_vel = torch.zeros([n, 3], device=env._device, dtype=torch.float)
+
+        for local_proj_id, proj_obj_id in enumerate(env._proj_ids):
+            curr_mask = proj_ids == local_proj_id
+            if (curr_mask.any().item()):
+                curr_env_ids = env_ids[curr_mask]
+                env._engine.set_root_pos(curr_env_ids, proj_obj_id, spawn_pos[curr_mask])
+                env._engine.set_root_rot(curr_env_ids, proj_obj_id, spawn_rot[curr_mask])
+                env._engine.set_root_vel(curr_env_ids, proj_obj_id, spawn_vel[curr_mask])
+                env._engine.set_root_ang_vel(curr_env_ids, proj_obj_id, spawn_ang_vel[curr_mask])
+                env._prev_proj_vel[curr_env_ids, local_proj_id] = spawn_vel[curr_mask]
+
+        env._proj_trigger_times[env_ids, proj_ids] = float("inf")
+
+    env._launch_projectiles = deterministic_launch
 
 
 def collect_step(env):
@@ -158,18 +207,25 @@ def main():
     env._tar_change_time_min = 1.0e9
     env._tar_change_time_max = 1.0e9
 
+    install_deterministic_spawn(env, dist=args.ball_spawn_dist)
+
     obs, info = agent._reset_envs()
     if (hasattr(env, "_tar_change_times")):
         env._tar_change_times[:] = float("inf")
 
     records = []
-    total_steps = args.num_steps * args.num_episodes
+    if (args.total_steps > 0):
+        total_steps = args.total_steps
+    else:
+        total_steps = args.steps_per_episode * args.num_episodes
+    print(f"running {total_steps} total steps "
+          f"({args.steps_per_episode} per episode, {args.num_envs} envs)")
     with torch.no_grad():
         for step in range(total_steps):
             action, _ = agent._decide_action(obs, info)
             _, _, done, _ = agent._step_env(action)
 
-            step_in_ep = step % args.num_steps
+            step_in_ep = step % args.steps_per_episode
             if (step_in_ep >= args.warmup_steps):
                 records.append(collect_step(env))
 

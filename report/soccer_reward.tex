@@ -1,0 +1,56 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{bm}
+
+\title{Soccer Task Reward Function}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Notation}
+
+\begin{itemize}
+    \item $\mathbf{p}_b \in \mathbb{R}^2$: ball position (xy-plane)
+    \item $\mathbf{v}_b \in \mathbb{R}^2$: ball velocity (xy-plane)
+    \item $\mathbf{p}_c \in \mathbb{R}^2$: character root position (xy-plane)
+    \item $\hat{\mathbf{d}}^* \in \mathbb{R}^2$: target ball direction (unit vector)
+    \item $s^* \in \mathbb{R}_{\geq 0}$: target ball speed
+    \item $w_s, w_d, w_r$: weights for speed, direction, and distance terms (default $0.45,\ 0.45,\ 0.1$)
+    \item $\sigma_s, \sigma_r$: scale factors for speed and distance (default $0.5,\ 0.5$)
+    \item $\varepsilon = 10^{-6}$: numerical stabiliser
+\end{itemize}
+
+\section*{Component Rewards}
+
+\paragraph{Speed reward.} Penalises deviation of the ball speed from the target speed:
+\begin{equation}
+    r_s = \exp\!\left(-\sigma_s \, \bigl(s^* - \|\mathbf{v}_b\|\bigr)^2\right).
+\end{equation}
+
+\paragraph{Direction reward.} Rewards alignment of the ball velocity with the target direction:
+\begin{equation}
+    r_d = \max\!\left(0,\; \frac{\mathbf{v}_b}{\|\mathbf{v}_b\| + \varepsilon} \cdot \hat{\mathbf{d}}^*\right).
+\end{equation}
+
+\paragraph{Distance reward.} Encourages the character to stay close to the ball:
+\begin{equation}
+    r_r = \exp\!\left(-\sigma_r \, \|\mathbf{p}_b - \mathbf{p}_c\|^2\right).
+\end{equation}
+
+\section*{Total Reward}
+
+\begin{equation}
+    r = w_s \, r_s + w_d \, r_d + w_r \, r_r,
+\end{equation}
+
+or equivalently,
+\begin{equation}
+    r = \underbrace{w_s \exp\!\bigl(-\sigma_s (s^* - \|\mathbf{v}_b\|)^2\bigr)}_{\text{speed}}
+      + \underbrace{w_d \max\!\left(0,\; \frac{\mathbf{v}_b \cdot \hat{\mathbf{d}}^*}{\|\mathbf{v}_b\| + \varepsilon}\right)}_{\text{direction}}
+      + \underbrace{w_r \exp\!\bigl(-\sigma_r \|\mathbf{p}_b - \mathbf{p}_c\|^2\bigr)}_{\text{distance}}.
+\end{equation}
+
+\end{document}
