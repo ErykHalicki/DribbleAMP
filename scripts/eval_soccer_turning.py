@@ -1,24 +1,18 @@
-"""Velocity Tracking Accuracy evaluation (dribbling with sharp turns).
+"""Dribbling trajectory eval with multiple samples and canonical-frame norm.
 
-Mirrors the protocol from the reference paper:
-    - Ball starts at the origin, commanded to move along +x at ~1 m/s.
-    - When the ball enters a 0.4 m radius circle centered at (1.5, 0) relative
-      to its spawn point, the target direction switches to a 45 or 90 degree
-      turn (left or right).
-    - 5 rollouts per (turn direction, turn angle), totalling 20 trials, with
-      +/-0.1 m/s random target-speed perturbation.
+For each of 5 conditions (straight, left 45/90, right 45/90), runs
+`--num_samples` rollouts in parallel envs:
+    - 10 s with target direction = +x (in the character's initial heading frame)
+    - 10 s with target direction rotated by the condition's signed angle
 
-Outputs:
-    - Per-condition mean trajectory plot with shaded variance band.
-    - Direction tracking error (target angle vs angle between fitted pre/post
-      turn lines).
-    - Speed tracking error (mean ball speed vs commanded speed).
+All trajectories are transformed into a canonical frame where every env starts
+at the origin with its character facing +x, so trajectories can be averaged
+across rollouts.
 
-Usage:
-    .venv/bin/python scripts/eval_soccer_turning.py \\
-        --model_file output/model.pt \\
-        [--num_trials_per_cond 5] \\
-        [--out_dir output/eval_turning]
+Outputs (under `--out_dir`):
+    - trajectories.png  mean trajectory per condition + std band, individual
+                        rollouts shown lightly.
+    - summary.txt       per-condition mean speed.
 """
 
 import argparse
@@ -45,33 +39,30 @@ import matplotlib.pyplot as plt
 
 
 CONDITIONS = [
-    ("left",  45),
-    ("left",  90),
-    ("right", 45),
-    ("right", 90),
+    ("straight",  0.0),
+    ("left 45",  +45.0),
+    ("left 90",  +90.0),
+    ("right 45", -45.0),
+    ("right 90", -90.0),
 ]
+COLORS = ["black", "tab:blue", "tab:cyan", "tab:red", "tab:orange"]
 TARGET_SPEED = 1.0
-SPEED_PERTURB = 0.1
-TURN_TRIGGER_CENTER = np.array([1.5, 0.0], dtype=np.float32)
-TURN_TRIGGER_RADIUS = 0.4
-INITIAL_DIR = np.array([1.0, 0.0], dtype=np.float32)
 BALL_SPAWN_DIST = 0.4
+HZ = 30
 
 
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--model_file", required=True)
-    p.add_argument("--env_config", default="data/envs/amp_soccer_humanoid_env_phase1.yaml")
+    p.add_argument("--env_config", default="data/envs/amp_soccer_humanoid_env_phase2.yaml")
     p.add_argument("--engine_config", default="data/engines/newton_engine.yaml")
     p.add_argument("--agent_config", default="data/agents/amp_task_humanoid_agent.yaml")
-    p.add_argument("--num_trials_per_cond", type=int, default=5)
-    p.add_argument("--episode_steps", type=int, default=900,
-                   help="Hard cap per rollout in env steps (30 Hz).")
-    p.add_argument("--warmup_steps", type=int, default=30)
+    p.add_argument("--num_samples", type=int, default=5,
+                   help="Rollouts per condition (envs = num_samples * 5).")
+    p.add_argument("--seconds_per_phase", type=float, default=10.0)
     p.add_argument("--device", default="cpu")
     p.add_argument("--visualize", action="store_true")
     p.add_argument("--out_dir", default="output/eval_turning")
-    p.add_argument("--seed", type=int, default=0)
     return p.parse_args()
 
 
@@ -110,218 +101,50 @@ def install_deterministic_spawn(env, dist):
     env._launch_projectiles = deterministic_launch
 
 
-def rotate_2d(v, angle_rad):
-    c, s = np.cos(angle_rad), np.sin(angle_rad)
-    return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1]], dtype=np.float32)
+def yaw_from_quat(q):
+    """Yaw (rotation about +z) from quaternion stored as (x, y, z, w)."""
+    x, y, z, w = q[..., 0], q[..., 1], q[..., 2], q[..., 3]
+    return np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
 
-def fit_line_angle(points):
-    """Return angle (rad) of best-fit line through 2D points, oriented along
-    the direction of travel (first-to-last)."""
-    if (points.shape[0] < 2):
-        return 0.0
-    centered = points - points.mean(axis=0, keepdims=True)
-    _, _, vh = np.linalg.svd(centered, full_matrices=False)
-    direction = vh[0]
-    travel = points[-1] - points[0]
-    if (np.dot(direction, travel) < 0):
-        direction = -direction
-    return float(np.arctan2(direction[1], direction[0]))
-
-
-def run_condition(env, agent, turn_side, turn_angle_deg, num_trials, args, rng):
-    """Run num_trials parallel rollouts for one (side, angle) condition."""
-    num_envs = env.get_num_envs()
-    assert num_envs >= num_trials, f"need num_envs >= {num_trials}"
-
-    sign = +1.0 if turn_side == "left" else -1.0
-    turn_angle_rad = sign * np.deg2rad(turn_angle_deg)
-
-    speed_perturb = rng.uniform(-SPEED_PERTURB, SPEED_PERTURB, size=num_trials).astype(np.float32)
-    tar_speed = TARGET_SPEED + speed_perturb
-
-    env._tar_ball_dir[:num_trials, 0] = float(INITIAL_DIR[0])
-    env._tar_ball_dir[:num_trials, 1] = float(INITIAL_DIR[1])
-    env._tar_ball_speed[:num_trials] = torch.from_numpy(tar_speed).to(env._device)
-
-    obs, info = agent._reset_envs()
-    if (hasattr(env, "_tar_change_times")):
-        env._tar_change_times[:] = float("inf")
-
-    env._tar_ball_dir[:num_trials, 0] = float(INITIAL_DIR[0])
-    env._tar_ball_dir[:num_trials, 1] = float(INITIAL_DIR[1])
-    env._tar_ball_speed[:num_trials] = torch.from_numpy(tar_speed).to(env._device)
-
-    proj_pos, _ = env._get_proj_states()
-    spawn_xy = proj_pos[:num_trials, 0, 0:2].detach().cpu().numpy().copy()
-
-    triggered = np.zeros(num_trials, dtype=bool)
-    trigger_step = np.full(num_trials, -1, dtype=np.int64)
-    traj = [[] for _ in range(num_trials)]
-    speed_samples = [[] for _ in range(num_trials)]
-
-    with torch.no_grad():
-        for step in range(args.episode_steps):
-            action, _ = agent._decide_action(obs, info)
-            _, _, done, _ = agent._step_env(action)
-
-            proj_pos, proj_vel = env._get_proj_states()
-            ball_xy = proj_pos[:num_trials, 0, 0:2].detach().cpu().numpy()
-            ball_v = proj_vel[:num_trials, 0, 0:2].detach().cpu().numpy()
-
-            rel_xy = ball_xy - spawn_xy
-            in_trigger = np.linalg.norm(rel_xy - TURN_TRIGGER_CENTER, axis=-1) < TURN_TRIGGER_RADIUS
-            new_trig_mask = in_trigger & (~triggered)
-            if (new_trig_mask.any()):
-                for i in np.where(new_trig_mask)[0]:
-                    new_dir = rotate_2d(INITIAL_DIR, turn_angle_rad)
-                    env._tar_ball_dir[i, 0] = float(new_dir[0])
-                    env._tar_ball_dir[i, 1] = float(new_dir[1])
-                    trigger_step[i] = step
-                triggered |= new_trig_mask
-
-            if (step >= args.warmup_steps):
-                for i in range(num_trials):
-                    traj[i].append(rel_xy[i].copy())
-                    speed_samples[i].append(float(np.linalg.norm(ball_v[i])))
-
-            obs, info = agent._reset_done_envs(done)
-            if (hasattr(env, "_tar_change_times")):
-                env._tar_change_times[:] = float("inf")
-
-    trials = []
-    for i in range(num_trials):
-        points = np.array(traj[i], dtype=np.float32)
-        ts = trigger_step[i]
-        if (ts < 0 or points.shape[0] < 10):
-            pre_pts = points[: max(1, points.shape[0] // 2)]
-            post_pts = points[max(1, points.shape[0] // 2):]
-        else:
-            log_trig = ts - args.warmup_steps
-            pad = 5
-            pre_pts = points[: max(2, log_trig - pad)]
-            post_pts = points[log_trig + pad:]
-            if (post_pts.shape[0] < 5):
-                post_pts = points[log_trig:]
-
-        pre_angle = fit_line_angle(pre_pts)
-        post_angle = fit_line_angle(post_pts)
-        measured_turn_deg = np.degrees((post_angle - pre_angle + np.pi) % (2 * np.pi) - np.pi)
-
-        trials.append({
-            "traj": points,
-            "trigger_step": ts,
-            "pre_angle": pre_angle,
-            "post_angle": post_angle,
-            "measured_turn_deg": float(measured_turn_deg),
-            "tar_speed": float(tar_speed[i]),
-            "mean_speed": float(np.mean(speed_samples[i])) if speed_samples[i] else 0.0,
-            "triggered": bool(triggered[i]),
-        })
-
-    return {
-        "side": turn_side,
-        "angle_deg": turn_angle_deg,
-        "signed_target_deg": sign * turn_angle_deg,
-        "trials": trials,
-    }
-
-
-def resample_trajectory(points, n_samples=200):
-    if (points.shape[0] < 2):
-        return np.zeros((n_samples, 2), dtype=np.float32)
-    seg = np.linalg.norm(np.diff(points, axis=0), axis=-1)
-    arc = np.concatenate([[0.0], np.cumsum(seg)])
-    total = arc[-1]
-    if (total < 1e-6):
-        return np.repeat(points[0:1], n_samples, axis=0)
-    u = np.linspace(0.0, total, n_samples)
-    out = np.zeros((n_samples, 2), dtype=np.float32)
-    for d in range(2):
-        out[:, d] = np.interp(u, arc, points[:, d])
+def world_to_local_dirs(local_dirs, yaw):
+    """Rotate local-frame unit directions by yaw to get world-frame directions.
+    local_dirs: [N, 2], yaw: [N]."""
+    c, s = np.cos(yaw), np.sin(yaw)
+    out = np.zeros_like(local_dirs)
+    out[:, 0] = c * local_dirs[:, 0] - s * local_dirs[:, 1]
+    out[:, 1] = s * local_dirs[:, 0] + c * local_dirs[:, 1]
     return out
 
 
-def plot_results(results, out_dir):
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    sides = ["left", "right"]
-    angle_colors = {45: "tab:blue", 90: "tab:orange"}
-
-    for ax, side in zip(axes, sides):
-        ax.set_title(f"{side.capitalize()}-turn dribbling trajectory")
-        ax.set_xlabel("x (m)")
-        ax.set_ylabel("y (m)")
-        ax.set_aspect("equal", adjustable="datalim")
-        ax.grid(True, alpha=0.3)
-        ax.axhline(0, color="k", linewidth=0.5)
-        ax.axvline(0, color="k", linewidth=0.5)
-        circ = plt.Circle(TURN_TRIGGER_CENTER, TURN_TRIGGER_RADIUS, color="gray",
-                          fill=False, linestyle="--", linewidth=1.0, label="turn trigger")
-        ax.add_patch(circ)
-
-        for angle in (45, 90):
-            cond = next(r for r in results if r["side"] == side and r["angle_deg"] == angle)
-            resampled = np.stack([resample_trajectory(t["traj"]) for t in cond["trials"]], axis=0)
-            mean_traj = resampled.mean(axis=0)
-            std_traj = resampled.std(axis=0)
-
-            color = angle_colors[angle]
-            ax.plot(mean_traj[:, 0], mean_traj[:, 1], color=color, linewidth=2.0,
-                    label=f"{angle}°")
-            ax.fill_between(mean_traj[:, 0],
-                            mean_traj[:, 1] - std_traj[:, 1],
-                            mean_traj[:, 1] + std_traj[:, 1],
-                            color=color, alpha=0.2)
-        ax.legend(loc="best")
-
-    fig.tight_layout()
-    path = os.path.join(out_dir, "trajectories.png")
-    fig.savefig(path, dpi=150)
-    plt.close(fig)
-    print(f"wrote {path}")
+def rotate_points(points_xy, yaw):
+    """Rotate [T, N, 2] points by -yaw[N] about the origin (world->local).
+    Equivalently apply R(-yaw)."""
+    c = np.cos(-yaw)
+    s = np.sin(-yaw)
+    x = points_xy[..., 0]
+    y = points_xy[..., 1]
+    return np.stack([c * x - s * y, s * x + c * y], axis=-1)
 
 
-def summarize(results, out_dir):
-    lines = []
-    lines.append("=" * 70)
-    lines.append(f"{'condition':<18}{'tar deg':>10}{'meas deg':>12}"
-                 f"{'dir err %':>12}{'mean spd':>12}{'spd err %':>12}")
-    lines.append("-" * 70)
-    for r in results:
-        target = r["signed_target_deg"]
-        measured = np.array([t["measured_turn_deg"] for t in r["trials"]])
-        mean_meas = float(np.mean(np.abs(measured)))
-        dir_rel_err = abs(abs(target) - mean_meas) / abs(target) * 100.0
-
-        speeds = np.array([t["mean_speed"] for t in r["trials"]])
-        targets = np.array([t["tar_speed"] for t in r["trials"]])
-        mean_spd = float(np.mean(speeds))
-        spd_rel_err = float(np.mean(np.abs(targets - speeds) / targets)) * 100.0
-
-        lines.append(f"{r['side']}-{r['angle_deg']:<12}{target:>10.1f}{mean_meas:>12.2f}"
-                     f"{dir_rel_err:>12.2f}{mean_spd:>12.3f}{spd_rel_err:>12.2f}")
-
-        for ti, t in enumerate(r["trials"]):
-            lines.append(f"    trial {ti}: triggered={t['triggered']} "
-                         f"meas={t['measured_turn_deg']:.2f}  "
-                         f"tar_spd={t['tar_speed']:.3f}  mean_spd={t['mean_speed']:.3f}")
-    lines.append("=" * 70)
-
-    text = "\n".join(lines)
-    print(text)
-    with open(os.path.join(out_dir, "summary.txt"), "w") as f:
-        f.write(text + "\n")
+def force_targets_world(env, world_dirs_xy, speed):
+    n = world_dirs_xy.shape[0]
+    env._tar_ball_dir[:n, 0] = torch.from_numpy(world_dirs_xy[:, 0].astype(np.float32)).to(env._device)
+    env._tar_ball_dir[:n, 1] = torch.from_numpy(world_dirs_xy[:, 1].astype(np.float32)).to(env._device)
+    env._tar_ball_speed[:n] = float(speed)
+    if (hasattr(env, "_tar_change_times")):
+        env._tar_change_times[:] = float("inf")
 
 
 def main():
     args = parse_args()
-    os.makedirs(os.path.join(REPO_ROOT, args.out_dir), exist_ok=True)
-    out_dir_abs = os.path.join(REPO_ROOT, args.out_dir)
-    rng = np.random.default_rng(args.seed)
+    out_dir = os.path.join(REPO_ROOT, args.out_dir)
+    os.makedirs(out_dir, exist_ok=True)
 
     mp_util.init(0, 1, args.device, master_port=None)
 
-    num_envs = args.num_trials_per_cond
+    num_conditions = len(CONDITIONS)
+    num_envs = num_conditions * args.num_samples
     env = env_builder.build_env(args.env_config, args.engine_config,
                                 num_envs=num_envs, device=args.device,
                                 visualize=args.visualize, record_video=False)
@@ -330,21 +153,129 @@ def main():
     agent.eval()
     agent.set_mode(base_agent.AgentMode.TEST)
 
-    env._episode_length = float(args.episode_steps) / 30.0 + 5.0
+    total_seconds = 2.0 * args.seconds_per_phase
+    env._episode_length = total_seconds + 5.0
     env._tar_change_time_min = 1.0e9
     env._tar_change_time_max = 1.0e9
 
     install_deterministic_spawn(env, dist=BALL_SPAWN_DIST)
 
-    results = []
-    for side, angle in CONDITIONS:
-        print(f"\n=== running {side}-turn {angle}° ({args.num_trials_per_cond} trials) ===")
-        cond_result = run_condition(env, agent, side, angle,
-                                    args.num_trials_per_cond, args, rng)
-        results.append(cond_result)
+    cond_idx = np.repeat(np.arange(num_conditions), args.num_samples)  # [num_envs]
+    cond_angle_deg = np.array([c[1] for c in CONDITIONS], dtype=np.float32)
+    per_env_angle_rad = np.deg2rad(cond_angle_deg[cond_idx])
 
-    summarize(results, out_dir_abs)
-    plot_results(results, out_dir_abs)
+    char_id = env._get_char_id()
+
+    init_dirs_local = np.tile(np.array([1.0, 0.0], dtype=np.float32)[None, :], (num_envs, 1))
+    root_rot = env._engine.get_root_rot(char_id).detach().cpu().numpy()
+    yaw = yaw_from_quat(root_rot)
+    init_dirs_world = world_to_local_dirs(init_dirs_local, yaw)
+    force_targets_world(env, init_dirs_world, TARGET_SPEED)
+
+    obs, info = agent._reset_envs()
+
+    root_rot = env._engine.get_root_rot(char_id).detach().cpu().numpy()
+    yaw = yaw_from_quat(root_rot)
+    init_dirs_world = world_to_local_dirs(init_dirs_local, yaw)
+    force_targets_world(env, init_dirs_world, TARGET_SPEED)
+
+    root_pos = env._engine.get_root_pos(char_id).detach().cpu().numpy()
+    char_origin_xy = root_pos[:, 0:2].copy()
+
+    phase2_dirs_local = np.stack([np.cos(per_env_angle_rad), np.sin(per_env_angle_rad)], axis=-1)
+    phase2_dirs_world = world_to_local_dirs(phase2_dirs_local.astype(np.float32), yaw)
+
+    steps_per_phase = int(round(args.seconds_per_phase * HZ))
+    total_steps = 2 * steps_per_phase
+
+    ball_traj_world = np.zeros((total_steps, num_envs, 2), dtype=np.float32)
+    speeds_per_env = [[] for _ in range(num_envs)]
+
+    with torch.no_grad():
+        for step in range(total_steps):
+            if (step == steps_per_phase):
+                force_targets_world(env, phase2_dirs_world, TARGET_SPEED)
+
+            action, _ = agent._decide_action(obs, info)
+            _, _, done, _ = agent._step_env(action)
+
+            proj_pos, proj_vel = env._get_proj_states()
+            ball_xy = proj_pos[:, 0, 0:2].detach().cpu().numpy()
+            ball_v = proj_vel[:, 0, 0:2].detach().cpu().numpy()
+            ball_traj_world[step] = ball_xy
+
+            for i in range(num_envs):
+                speeds_per_env[i].append(float(np.linalg.norm(ball_v[i])))
+
+            obs, info = agent._reset_done_envs(done)
+            if (step < steps_per_phase):
+                force_targets_world(env, init_dirs_world, TARGET_SPEED)
+            else:
+                force_targets_world(env, phase2_dirs_world, TARGET_SPEED)
+
+            if (step % 50 == 0):
+                print(f"step {step}/{total_steps}")
+
+    rel_world = ball_traj_world - char_origin_xy[None, :, :]
+    rel_local = rotate_points(rel_world, yaw)
+
+    n_cond = len(CONDITIONS)
+    fig, axes = plt.subplots(1, n_cond, figsize=(4.0 * n_cond, 4.5), squeeze=False)
+    axes = axes[0]
+
+    all_pts = rel_local.reshape(-1, 2)
+    pad = 0.3
+    xlim = (float(all_pts[:, 0].min()) - pad, float(all_pts[:, 0].max()) + pad)
+    ylim = (float(all_pts[:, 1].min()) - pad, float(all_pts[:, 1].max()) + pad)
+
+    for c_idx, ((label, _), color, ax) in enumerate(zip(CONDITIONS, COLORS, axes)):
+        env_mask = cond_idx == c_idx
+        trials = rel_local[:, env_mask, :]  # [T, S, 2]
+
+        ax.set_title(label)
+        ax.set_xlabel("x (m)")
+        if (c_idx == 0):
+            ax.set_ylabel("y (m)")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.grid(True, alpha=0.3)
+        ax.axhline(0, color="k", linewidth=0.5)
+        ax.axvline(0, color="k", linewidth=0.5)
+
+        for s in range(trials.shape[1]):
+            ax.plot(trials[:, s, 0], trials[:, s, 1], color=color, linewidth=0.7, alpha=0.35)
+
+        mean_traj = trials.mean(axis=1)
+        std_traj = trials.std(axis=1)
+        ax.plot(mean_traj[:, 0], mean_traj[:, 1], color=color, linewidth=2.2, label="mean")
+        ax.fill_between(mean_traj[:, 0],
+                        mean_traj[:, 1] - std_traj[:, 1],
+                        mean_traj[:, 1] + std_traj[:, 1],
+                        color=color, alpha=0.18, label="±1σ")
+        ax.scatter([mean_traj[steps_per_phase, 0]], [mean_traj[steps_per_phase, 1]],
+                   color=color, marker="x", s=50, label="turn")
+        ax.scatter([0], [0], color="k", marker="o", s=30)
+        ax.scatter([BALL_SPAWN_DIST], [0], color="gray", marker="s", s=20)
+        ax.legend(loc="best", fontsize=8)
+
+    fig.suptitle(f"Dribbling trajectories ({args.num_samples} rollouts/condition)\n"
+                 f"{args.seconds_per_phase:.0f} s straight + {args.seconds_per_phase:.0f} s post-turn")
+    fig.tight_layout()
+    path = os.path.join(out_dir, "trajectories.png")
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"wrote {path}")
+
+    summary_lines = ["condition       mean speed (m/s)"]
+    for c_idx, (label, _) in enumerate(CONDITIONS):
+        env_mask = cond_idx == c_idx
+        speeds = np.concatenate([np.array(speeds_per_env[i]) for i in np.where(env_mask)[0]])
+        summary_lines.append(f"  {label:<13} {speeds.mean():.3f}  +/- {speeds.std():.3f}")
+    text = "\n".join(summary_lines)
+    print(text)
+    with open(os.path.join(out_dir, "summary.txt"), "w") as f:
+        f.write(text + "\n")
 
 
 if __name__ == "__main__":
