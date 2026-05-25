@@ -243,9 +243,6 @@ def main():
         ax.axhline(0, color="k", linewidth=0.5)
         ax.axvline(0, color="k", linewidth=0.5)
 
-        for s in range(trials.shape[1]):
-            ax.plot(trials[:, s, 0], trials[:, s, 1], color=color, linewidth=0.7, alpha=0.35)
-
         mean_traj = trials.mean(axis=1)
         std_traj = trials.std(axis=1)
         ax.plot(mean_traj[:, 0], mean_traj[:, 1], color=color, linewidth=2.2, label="mean")
