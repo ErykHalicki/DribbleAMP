@@ -24,6 +24,15 @@ STEPS="${STEPS:-2000}"
 NUM_ENVS="${NUM_ENVS:-8}"
 ENV_CONFIG="${ENV_CONFIG:-data/envs/amp_soccer_humanoid_env_phase2.yaml}"
 
+if [ -z "${DEVICE:-}" ]; then
+    if (cd "${SCRIPT_DIR}" && .venv/bin/python -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null); then
+        DEVICE=cuda
+    else
+        DEVICE=cpu
+    fi
+fi
+echo "Using device: ${DEVICE}"
+
 read -s -p "Password for ${REMOTE_HOST}: " SSHPASS
 echo
 export SSHPASS
@@ -70,6 +79,7 @@ for filter in phase1 phase2_scratch phase2; do
             --env_config "${ENV_CONFIG}" \
             --num_envs "${NUM_ENVS}" \
             --total_steps "${STEPS}" \
+            --device "${DEVICE}" \
             --csv "${csv_path}"
     )
 
