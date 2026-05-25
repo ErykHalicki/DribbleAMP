@@ -7,6 +7,7 @@
 
 # Resume from phase-1 checkpoint with higher ball-velocity weight.
 # Override checkpoint: sbatch --export=ALL,PHASE1_MODEL=output/soccer_phase1/model_xxxxx.pt scripts/soccer_train_phase2.bash
+# Train phase 2 from scratch (1-phase baseline): sbatch --export=ALL,FROM_SCRATCH=1 scripts/soccer_train_phase2.bash
 
 set -euo pipefail
 
@@ -31,8 +32,13 @@ fi
 
 cd "${PROJECT_DIR}/MimicKit"
 
+FROM_SCRATCH="${FROM_SCRATCH:-0}"
+
 # Resolve PHASE1_MODEL: explicit > latest phase 1 final model.pt > latest phase 1 int_models checkpoint.
-if [ -z "${PHASE1_MODEL:-}" ]; then
+if [ "${FROM_SCRATCH}" = "1" ]; then
+    PHASE1_MODEL=""
+    echo "FROM_SCRATCH=1: training phase 2 config from scratch (1-phase baseline)."
+elif [ -z "${PHASE1_MODEL:-}" ]; then
     PHASE1_FINAL=$(ls -1 output/soccer_phase1*/model.pt 2>/dev/null | sort | tail -n 1 || true)
     PHASE1_INT=$(ls -1 output/soccer_phase1*/int_models/model_*.pt 2>/dev/null | sort | tail -n 1 || true)
     if [ -n "${PHASE1_FINAL}" ]; then
@@ -40,13 +46,17 @@ if [ -z "${PHASE1_MODEL:-}" ]; then
     elif [ -n "${PHASE1_INT}" ]; then
         PHASE1_MODEL="${PHASE1_INT}"
     else
-        echo "ERROR: no phase 1 checkpoint found under output/soccer_phase1*/; set PHASE1_MODEL explicitly." >&2
+        echo "ERROR: no phase 1 checkpoint found under output/soccer_phase1*/; set PHASE1_MODEL explicitly or pass FROM_SCRATCH=1." >&2
         exit 1
     fi
 fi
-echo "Phase 1 source model: ${PHASE1_MODEL}"
+[ -n "${PHASE1_MODEL}" ] && echo "Phase 1 source model: ${PHASE1_MODEL}"
 
-RUN_PREFIX=output/soccer_phase2
+if [ "${FROM_SCRATCH}" = "1" ]; then
+    RUN_PREFIX=output/soccer_phase2_scratch
+else
+    RUN_PREFIX=output/soccer_phase2
+fi
 FRESH="${FRESH:-0}"
 if [ "${FRESH}" = "1" ]; then
     LATEST_INT=""
@@ -66,7 +76,16 @@ elif [ -n "${LATEST_FINAL}" ]; then
 else
     OUT_DIR=${RUN_PREFIX}_$(date +%Y%m%d_%H%M%S)/
     RESUME_MODEL="${PHASE1_MODEL}"
-    echo "Starting phase 2 from phase 1 checkpoint ${RESUME_MODEL} (out_dir=${OUT_DIR})"
+    if [ -n "${RESUME_MODEL}" ]; then
+        echo "Starting phase 2 from phase 1 checkpoint ${RESUME_MODEL} (out_dir=${OUT_DIR})"
+    else
+        echo "Starting phase 2 from scratch (out_dir=${OUT_DIR})"
+    fi
 fi
 
-python -u mimickit/run.py --mode train --num_envs 1024 --engine_config data/engines/newton_engine.yaml --env_config data/envs/amp_soccer_humanoid_env_phase2.yaml --agent_config data/agents/amp_task_humanoid_agent_phase2.yaml --model_file "${RESUME_MODEL}" --visualize false --out_dir "${OUT_DIR}" --logger tb --save_int_models true
+MODEL_ARG=()
+if [ -n "${RESUME_MODEL}" ]; then
+    MODEL_ARG=(--model_file "${RESUME_MODEL}")
+fi
+
+python -u mimickit/run.py --mode train --num_envs 1024 --engine_config data/engines/newton_engine.yaml --env_config data/envs/amp_soccer_humanoid_env_phase2.yaml --agent_config data/agents/amp_task_humanoid_agent_phase2.yaml "${MODEL_ARG[@]}" --visualize false --out_dir "${OUT_DIR}" --logger tb --save_int_models true

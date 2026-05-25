@@ -36,14 +36,20 @@ class TaskSoccerEnv(task_dodgeball_env.TaskDodgeballEnv):
         self._tar_ball_dir[..., 0] = 1.0
         self._tar_ball_speed = torch.ones([num_envs], device=self._device, dtype=torch.float)
         self._tar_change_times = torch.zeros([num_envs], device=self._device, dtype=torch.float)
+
+        self._vel_hist_len = 15
+        self._vel_hist = torch.zeros([num_envs, self._vel_hist_len, 2],
+                                     device=self._device, dtype=torch.float)
+        self._vel_hist_idx = 0
         return
 
     def _reset_envs(self, env_ids):
         super()._reset_envs(env_ids)
         if (len(env_ids) > 0):
             self._reset_tar(env_ids)
-            # Spawn the ball immediately at episode start (next _update_task tick).
             self._proj_trigger_times[env_ids] = self._time_buf[env_ids].unsqueeze(-1)
+            if (hasattr(self, "_vel_hist")):
+                self._vel_hist[env_ids] = 0.0
         return
 
     def _reset_tar(self, env_ids):
@@ -65,6 +71,10 @@ class TaskSoccerEnv(task_dodgeball_env.TaskDodgeballEnv):
         return
 
     def _update_task(self):
+        _, proj_vel = self._get_proj_states()
+        self._vel_hist[:, self._vel_hist_idx] = proj_vel[:, 0, 0:2]
+        self._vel_hist_idx = (self._vel_hist_idx + 1) % self._vel_hist_len
+
         reset_mask = self._time_buf >= self._tar_change_times
         reset_env_ids = reset_mask.nonzero(as_tuple=False).flatten()
         if (len(reset_env_ids) > 0):
@@ -82,24 +92,50 @@ class TaskSoccerEnv(task_dodgeball_env.TaskDodgeballEnv):
         return
 
     def _render_tar_velocity_lines(self):
-        line_width = 4.0
-        col = np.array([[0.9, 0.2, 0.2, 1.0]], dtype=np.float32)
+        line_width = 20.0
+        tar_col = np.array([[0.9, 0.2, 0.2, 1.0]], dtype=np.float32)
+        vel_col = np.array([[0.2, 0.9, 0.2, 1.0]], dtype=np.float32)
 
         proj_pos, _ = self._get_proj_states()
         ball_xy = proj_pos[:, 0, 0:2].cpu().numpy()
+        ball_vel_xy = self._vel_hist.mean(dim=1).cpu().numpy()
         tar_dir = self._tar_ball_dir.cpu().numpy()
         tar_speed = self._tar_ball_speed.cpu().numpy()
 
         num_envs = self.get_num_envs()
         for i in range(num_envs):
-            start = np.zeros((1, 3), dtype=np.float32)
-            start[0, 0:2] = ball_xy[i]
-            start[0, 2] = 0.02
+            base = np.array([ball_xy[i, 0], ball_xy[i, 1], 0.02], dtype=np.float32)
 
-            end = start.copy()
-            end[0, 0:2] += tar_speed[i] * tar_dir[i]
+            tar_vec = np.array([tar_speed[i] * tar_dir[i, 0],
+                                tar_speed[i] * tar_dir[i, 1], 0.0], dtype=np.float32)
+            self._draw_thick_line(i, base, base + tar_vec, tar_col, line_width)
 
-            self._engine.draw_lines(i, start, end, col, line_width)
+            vel_vec = np.array([ball_vel_xy[i, 0], ball_vel_xy[i, 1], 0.0], dtype=np.float32)
+            self._draw_thick_line(i, base, base + vel_vec, vel_col, line_width)
+        return
+
+    def _draw_thick_line(self, env_id, start, end, col, line_width):
+        # Isaac Gym's add_lines ignores width (OpenGL Core deprecated glLineWidth),
+        # so fake thickness by drawing parallel offset copies in the XY plane.
+        spacing = 0.0033
+        n = max(1, int(round(line_width * 3)))
+
+        direction = end - start
+        length_xy = float(np.linalg.norm(direction[0:2]))
+        if (length_xy < 1e-6):
+            perp = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        else:
+            perp = np.array([-direction[1], direction[0], 0.0], dtype=np.float32) / length_xy
+
+        starts = np.zeros((n, 3), dtype=np.float32)
+        ends = np.zeros((n, 3), dtype=np.float32)
+        cols = np.tile(col[0:1], (n, 1))
+        for k in range(n):
+            offset = (k - (n - 1) * 0.5) * spacing * perp
+            starts[k] = start + offset
+            ends[k] = end + offset
+
+        self._engine.draw_lines(env_id, starts, ends, cols, 1.0)
         return
 
     def _launch_projectiles(self, env_ids, proj_ids):
