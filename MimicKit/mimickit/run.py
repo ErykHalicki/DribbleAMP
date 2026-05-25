@@ -4,6 +4,13 @@ import shutil
 import sys
 import time
 
+import torch
+try:
+    if torch.cuda.is_available():
+        torch.zeros(1, device='cuda')
+except Exception:
+    pass
+
 import envs.env_builder as env_builder
 import learning.agent_builder as agent_builder
 import util.arg_parser as arg_parser

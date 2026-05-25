@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from util import display
+import pyglet
+pyglet.options['headless'] = True
+
 import newton
 import numpy as np
-import pyglet
 from typing import TYPE_CHECKING
 
 import engines.video_recorder as video_recorder
