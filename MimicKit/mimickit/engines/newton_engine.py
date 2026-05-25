@@ -1,8 +1,10 @@
 import warp as wp
 wp.config.enable_backward = False
 
+import sys
 import pyglet
-pyglet.options['headless'] = True
+if sys.platform.startswith("linux"):
+    pyglet.options['headless'] = True
 
 import newton
 import numpy as np

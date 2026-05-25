@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from util import display
+import sys
 import pyglet
-pyglet.options['headless'] = True
+if sys.platform.startswith("linux"):
+    pyglet.options['headless'] = True
 
 import newton
 import numpy as np
