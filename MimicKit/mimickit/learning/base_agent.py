@@ -137,6 +137,11 @@ class BaseAgent(torch.nn.Module):
         self.load_state_dict(state_dict)
         self._sync_optimizer()
         Logger.print("Loaded model parameters from {:s}".format(in_file))
+        import re
+        m = re.search(r"model_(\d+)\.pt$", in_file)
+        if (m is not None):
+            self._resume_iter = int(m.group(1))
+            Logger.print("Resume iter counter from {:d}".format(self._resume_iter))
         return
 
     def calc_num_params(self):
@@ -218,7 +223,7 @@ class BaseAgent(torch.nn.Module):
         return sample_count
     
     def _init_train(self):
-        self._iter = 0
+        self._iter = getattr(self, "_resume_iter", 0)
         self._sample_count = 0
         self._exp_buffer.clear()
         self._train_return_tracker.reset()

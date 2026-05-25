@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class NewtonVideoRecorder(video_recorder.VideoRecorder):
     def __init__(self,
                  engine: newton_engine.NewtonEngine,
-                 resolution: tuple[int, int] = (854, 480),
+                 resolution: tuple[int, int] = (1920, 1080),
                  cam_pos: np.array = np.array([-3.5, -3.5, 2.0]),
                  cam_target: np.array = np.array([0.0, 0.0, 1.0])) -> None:
 

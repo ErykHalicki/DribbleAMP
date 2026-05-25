@@ -15,6 +15,55 @@ import engines.engine as engine
 import engines.newton_recorder as newton_recorder
 from util.logger import Logger
 
+# Patch Newton's shape fragment shader: use sphere-normal UVs for checker so a small
+# ball's checker pattern is visible (default checker_scale=1.0 makes tiles huge for
+# small objects). Replaces the checker UV calc only; ground plane fallback still works
+# because we keep checker_scale=1.0 and uv only changes for unit-ish LocalPos.
+try:
+    import newton._src.viewer.gl.shaders as _newton_shaders
+    _orig_block = (
+        "    if (checker_enable > 0.0)\n"
+        "    {\n"
+        "        vec2 uv = LocalPos.xy * checker_scale;\n"
+        "        float cb = checker(uv);\n"
+        "        vec3 albedo2 = albedo*0.7;\n"
+        "        // pick between the two colors\n"
+        "        albedo = mix(albedo, albedo2, cb);\n"
+        "    }"
+    )
+    _new_block = (
+        "    if (checker_enable > 0.0)\n"
+        "    {\n"
+        "        // Small objects (e.g., the soccer ball): use spherical UVs so the\n"
+        "        // checker actually tiles across the surface, and use high-contrast\n"
+        "        // black/white so it's visible. Large surfaces (ground) keep the\n"
+        "        // original subtle two-tone tiling.\n"
+        "        bool small_obj = checker_enable > 1.5;\n"
+        "        vec2 uv;\n"
+        "        if (small_obj)\n"
+        "        {\n"
+        "            vec3 n_local = normalize(LocalPos);\n"
+        "            float theta = atan(n_local.y, n_local.x);\n"
+        "            float phi = asin(clamp(n_local.z, -1.0, 1.0));\n"
+        "            uv = vec2(theta, phi) * 3.0;\n"
+        "        }\n"
+        "        else\n"
+        "        {\n"
+        "            uv = LocalPos.xy * checker_scale;\n"
+        "        }\n"
+        "        float cb = checker(uv);\n"
+        "        vec3 albedo2 = small_obj ? vec3(0.05) : albedo * 0.7;\n"
+        "        vec3 albedo1 = small_obj ? vec3(0.95) : albedo;\n"
+        "        albedo = mix(albedo1, albedo2, cb);\n"
+        "    }"
+    )
+    if _orig_block in _newton_shaders.shape_fragment_shader:
+        _newton_shaders.shape_fragment_shader = _newton_shaders.shape_fragment_shader.replace(
+            _orig_block, _new_block
+        )
+except Exception as _patch_err:
+    Logger.print("[checker shader patch] failed: {}".format(_patch_err))
+
 def str_to_key_code(key_str):
     key_name = key_str.upper()
 
@@ -773,6 +822,39 @@ class NewtonEngine(engine.Engine):
         viewer.set_model(self._sim_model)
         viewer.set_world_offsets([env_spacing, env_spacing, 0.0])
         self._apply_obj_colors(viewer)
+        self._enable_checker_on_projectile(viewer)
+        return
+
+    def _enable_checker_on_projectile(self, viewer):
+        shape_labels = self._sim_model.shape_label
+        print("[checker debug] total shapes:", len(shape_labels))
+        for i, lbl in enumerate(shape_labels[:20]):
+            print(f"  shape[{i}] = {lbl!r}")
+        print("  ... (truncated)" if len(shape_labels) > 20 else "")
+        target_shape_indices = [
+            i for i, lbl in enumerate(shape_labels)
+            if lbl is not None and "projectile" in lbl.lower()
+        ]
+        print(f"[checker debug] matched {len(target_shape_indices)} projectile shapes: {target_shape_indices[:10]}")
+        if (len(target_shape_indices) == 0):
+            return
+        touched_batches = set()
+        for s_idx in target_shape_indices:
+            batch = viewer._shape_to_batch[s_idx]
+            if (batch is None):
+                continue
+            try:
+                local_idx = list(batch.model_shapes).index(s_idx)
+            except ValueError:
+                continue
+            materials_np = batch.materials.numpy()
+            if (local_idx < 0 or local_idx >= materials_np.shape[0]):
+                continue
+            materials_np[local_idx] = [0.5, 0.0, 2.0, 0.0]
+            batch.materials = wp.array(materials_np, dtype=wp.vec4, device=batch.materials.device)
+            touched_batches.add(id(batch))
+        if (len(touched_batches) > 0):
+            viewer.model_changed = True
         return
 
     def draw_lines(self, env_id, start_verts, end_verts, cols, line_width):
