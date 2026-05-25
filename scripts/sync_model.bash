@@ -40,7 +40,9 @@ else
 fi
 
 if [ -z "${REMOTE_MODEL}" ]; then
-    echo "ERROR: no model found under ${REMOTE_BASE}/${GLOB:-soccer_phase*}/" >&2
+    echo "ERROR: no model found matching '${RUN_FILTER:-<any>}' under ${REMOTE_BASE}/" >&2
+    echo "Available remote run dirs:" >&2
+    ${SSH_CMD} "${REMOTE_HOST}" "ls -1d ${REMOTE_BASE}/soccer_* 2>/dev/null" >&2 || true
     exit 1
 fi
 
