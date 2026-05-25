@@ -204,10 +204,14 @@ def main():
     agent.set_mode(base_agent.AgentMode.TEST)
 
     env._episode_length = float(args.episode_length)
+    env._tar_change_time_min = 1.0e9
+    env._tar_change_time_max = 1.0e9
 
     install_deterministic_spawn(env, dist=args.ball_spawn_dist)
 
     obs, info = agent._reset_envs()
+    if (hasattr(env, "_tar_change_times")):
+        env._tar_change_times[:] = float("inf")
 
     records = []
     if (args.total_steps > 0):
@@ -226,6 +230,8 @@ def main():
                 records.append(collect_step(env))
 
             obs, info = agent._reset_done_envs(done)
+            if (hasattr(env, "_tar_change_times")):
+                env._tar_change_times[:] = float("inf")
 
             if (step % 100 == 0):
                 print(f"step {step}/{total_steps}")
