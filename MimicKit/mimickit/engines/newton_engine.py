@@ -1,11 +1,13 @@
 import warp as wp
 wp.config.enable_backward = False
 
+import pyglet
+pyglet.options['headless'] = True
+
 import newton
 import numpy as np
 import os
 import torch
-import pyglet
 
 import engines.engine as engine
 import engines.newton_recorder as newton_recorder
