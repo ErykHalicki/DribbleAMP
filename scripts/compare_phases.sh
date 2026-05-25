@@ -26,7 +26,7 @@ ENV_CONFIG="${ENV_CONFIG:-data/envs/amp_soccer_humanoid_env_phase2.yaml}"
 
 if [ -z "${DEVICE:-}" ]; then
     if (cd "${SCRIPT_DIR}" && .venv/bin/python -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null); then
-        DEVICE=cuda
+        DEVICE=cuda:0
     else
         DEVICE=cpu
     fi
