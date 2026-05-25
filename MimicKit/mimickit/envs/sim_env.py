@@ -85,7 +85,9 @@ class SimEnv(base_env.BaseEnv):
 
         if (self._visualize):
             self._render()
-        
+        elif (self._engine.enabled_record_video()):
+            self._render_scene()
+
         return self._obs_buf, self._reward_buf, self._done_buf, self._info
     
     def get_num_envs(self):

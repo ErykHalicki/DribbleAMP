@@ -348,6 +348,8 @@ class NewtonEngine(engine.Engine):
             self._record_video = False
         else:
             self._viewer = None
+            self._draw_line_count = 0
+            self._frame_line_buffer = []
             self._record_video = record_video
         
         return
@@ -397,6 +399,8 @@ class NewtonEngine(engine.Engine):
         if self.enabled_record_video():
             self._video_recorder = self._build_video_recorder()
             self._recording = False
+            if (not hasattr(self, "_camera_offsets")):
+                self._camera_offsets = self._video_recorder._viewer.world_offsets.numpy()
 
         self._build_graphs()
         return
@@ -485,13 +489,14 @@ class NewtonEngine(engine.Engine):
     def render(self):
         sim_time = self.get_sim_time()
 
-        self._viewer.end_frame()
-        self._viewer.begin_frame(sim_time)
-        self._viewer.log_state(self._sim_state.raw_state)
+        if (self._viewer is not None):
+            self._viewer.end_frame()
+            self._viewer.begin_frame(sim_time)
+            self._viewer.log_state(self._sim_state.raw_state)
+            super().render()
 
         self._draw_line_count = 0
-        
-        super().render()
+        self._frame_line_buffer = []
         return
     
     def get_timestep(self):
@@ -778,12 +783,20 @@ class NewtonEngine(engine.Engine):
         start_pts[:, :2] += cam_offset[:2]
         end_pts[:, :2] += cam_offset[:2]
         line_name = "lines{:d}".format(self._draw_line_count)
-        self._viewer.log_lines(name=line_name, 
-                               starts=wp.array(start_pts, dtype=wp.vec3), 
-                               ends=wp.array(end_pts, dtype=wp.vec3), 
-                               colors=wp.array(cols[:, :3], dtype=wp.vec3), 
-                               width=line_width)
+        starts_arr = wp.array(start_pts, dtype=wp.vec3)
+        ends_arr = wp.array(end_pts, dtype=wp.vec3)
+        colors_arr = wp.array(cols[:, :3], dtype=wp.vec3)
+        if (self._viewer is not None):
+            self._viewer.log_lines(name=line_name, starts=starts_arr, ends=ends_arr,
+                                   colors=colors_arr, width=line_width)
+        self._frame_line_buffer.append((line_name, starts_arr, ends_arr, colors_arr, line_width))
         self._draw_line_count += 1
+        return
+
+    def replay_frame_lines(self, viewer):
+        for line_name, starts_arr, ends_arr, colors_arr, line_width in self._frame_line_buffer:
+            viewer.log_lines(name=line_name, starts=starts_arr, ends=ends_arr,
+                             colors=colors_arr, width=line_width)
         return
     
     def register_keyboard_callback(self, key_str, callback_func):
@@ -996,6 +1009,7 @@ class NewtonEngine(engine.Engine):
     def _build_viewer(self):
         self._viewer = newton.viewer.ViewerGL(headless=False)
         self._draw_line_count = 0
+        self._frame_line_buffer = []
 
         def on_keyboard_event(symbol, modifiers):
             self._on_keyboard_event(symbol, modifiers)

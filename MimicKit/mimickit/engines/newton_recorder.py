@@ -73,6 +73,7 @@ class NewtonVideoRecorder(video_recorder.VideoRecorder):
 
         self._viewer.begin_frame(sim_time)
         self._viewer.log_state(sim_state.raw_state)
+        self._engine.replay_frame_lines(self._viewer)
         self._viewer.end_frame()
 
         try:
