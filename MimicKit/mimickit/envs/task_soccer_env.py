@@ -92,7 +92,7 @@ class TaskSoccerEnv(task_dodgeball_env.TaskDodgeballEnv):
         return
 
     def _render_tar_velocity_lines(self):
-        line_width = 20.0
+        line_width = 10.0
         tar_col = np.array([[0.9, 0.2, 0.2, 1.0]], dtype=np.float32)
         vel_col = np.array([[0.2, 0.9, 0.2, 1.0]], dtype=np.float32)
 
@@ -133,7 +133,7 @@ class TaskSoccerEnv(task_dodgeball_env.TaskDodgeballEnv):
         for k in range(n):
             offset = (k - (n - 1) * 0.5) * spacing * perp
             starts[k] = start + offset
-            ends[k] = end + offset
+            ends[k] = end  # converge at tip → triangle/wedge shape
 
         self._engine.draw_lines(env_id, starts, ends, cols, 1.0)
         return
