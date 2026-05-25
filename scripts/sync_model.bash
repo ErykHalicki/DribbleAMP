@@ -36,11 +36,14 @@ else
         GLOB="soccer_phase*"
         FILTER_RE="."
     fi
-    REMOTE_MODEL=$(${SSH_CMD} "${REMOTE_HOST}" "ls -1t ${REMOTE_BASE}/${GLOB}/model.pt ${REMOTE_BASE}/${GLOB}/int_models/model_*.pt 2>/dev/null" | grep -E "${FILTER_RE}" | head -n 1)
+    RAW_LISTING=$(${SSH_CMD} "${REMOTE_HOST}" "ls -1t ${REMOTE_BASE}/${GLOB}/model.pt ${REMOTE_BASE}/${GLOB}/int_models/model_*.pt 2>/dev/null" || true)
+    REMOTE_MODEL=$(echo "${RAW_LISTING}" | grep -E "${FILTER_RE}" | head -n 1 || true)
 fi
 
 if [ -z "${REMOTE_MODEL}" ]; then
     echo "ERROR: no model found matching '${RUN_FILTER:-<any>}' under ${REMOTE_BASE}/" >&2
+    echo "Raw ls listing (before regex filter):" >&2
+    echo "${RAW_LISTING:-<empty>}" >&2
     echo "Available remote run dirs:" >&2
     ${SSH_CMD} "${REMOTE_HOST}" "ls -1d ${REMOTE_BASE}/soccer_* 2>/dev/null" >&2 || true
     exit 1
