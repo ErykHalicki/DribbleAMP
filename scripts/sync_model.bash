@@ -26,11 +26,17 @@ if [ -n "${REMOTE_MODEL:-}" ]; then
 else
     if [ -n "${RUN_FILTER}" ]; then
         GLOB="soccer_${RUN_FILTER}*"
-        echo "Filtering remote runs by: ${GLOB}"
+        # Match the run name *exactly* up to the timestamp, so `phase2` does not
+        # also pick up `phase2_scratch_*`. A run dir looks like
+        # "soccer_<name>_YYYYMMDD_HHMMSS", so require an underscore + digit after
+        # the filter (or the literal filter if the user passed a full dir name).
+        FILTER_RE="^${REMOTE_BASE}/soccer_${RUN_FILTER}(_[0-9]|/|\$)"
+        echo "Filtering remote runs by: ${GLOB} (regex: ${FILTER_RE})"
     else
         GLOB="soccer_phase*"
+        FILTER_RE="."
     fi
-    REMOTE_MODEL=$(${SSH_CMD} "${REMOTE_HOST}" "ls -1t ${REMOTE_BASE}/${GLOB}/model.pt ${REMOTE_BASE}/${GLOB}/int_models/model_*.pt 2>/dev/null | head -n 1")
+    REMOTE_MODEL=$(${SSH_CMD} "${REMOTE_HOST}" "ls -1t ${REMOTE_BASE}/${GLOB}/model.pt ${REMOTE_BASE}/${GLOB}/int_models/model_*.pt 2>/dev/null" | grep -E "${FILTER_RE}" | head -n 1)
 fi
 
 if [ -z "${REMOTE_MODEL}" ]; then
