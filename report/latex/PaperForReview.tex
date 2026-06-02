@@ -319,11 +319,27 @@ AMP/PPO agent from MimicKit. The style dataset is the retargeted locomotion
 clips (no dribbling clips). Episodes last $60$\,s in both stages. Each training
 run took roughly $24$ hours on an RTX 5060 Ti.
 
-\subsection{Evaluation metrics}
-We measure, over evaluation episodes: (i) \emph{speed error}
-$|s^* - \|\mathbf{v}_b\||$ (m/s); (ii) \emph{angle error}, the angle between the
-ball velocity and the target direction (deg); (iii) \emph{character--ball
-distance} (m); and (iv) mean test return during training. We also assess gait
+\subsection{Evaluation protocol and metrics}
+\label{sec:eval}
+We evaluate each policy deterministically (action mean, no exploration noise)
+by rolling it out across $8$ parallel environments for a fixed number of steps.
+To isolate tracking quality from the command schedule, the target command
+(direction $\hat{\mathbf{d}}^*$ and speed $s^*$) is sampled once per episode and
+then held \emph{fixed} for the whole rollout rather than re-sampled. The ball is
+spawned deterministically $0.4$\,m from the agent in the target direction so it
+is reachable on the first kick, and the first $30$ steps after each reset are
+discarded as warm-up to let the ball settle. At every remaining step we log,
+for each environment, the target velocity $s^*\hat{\mathbf{d}}^*$, the actual
+ball velocity $\mathbf{v}_b$, and the character--ball distance; all metrics are
+means over this pooled set of (environment, step) samples.
+
+We report three metrics: (i) \emph{speed error} $|s^* - \|\mathbf{v}_b\||$
+(m/s); (ii) \emph{angle error}, the angle
+$\arccos\!\bigl(\hat{\mathbf{v}}_b \cdot \hat{\mathbf{d}}^*\bigr)$ between the
+ball velocity and the target direction (deg), computed only over samples where
+the ball is actually moving ($\|\mathbf{v}_b\| > 0.05$\,m/s) since direction is
+undefined for a stationary ball; and (iii) \emph{character--ball distance} (m).
+We additionally track mean test return during training and assess gait
 naturalness qualitatively from rollout videos.
 
 \subsection{Ablations}
@@ -369,18 +385,53 @@ from $19.70^\circ$ to $19.52^\circ$ and speed error from $0.735$ to $0.732$\,m/s
 This contrasts with the large gap DribbleMaster reports for their curriculum,
 and we attribute the difference partly to AMP's style prior already
 regularizing the policy toward sensible locomotion, and partly to our inability
-to tune extensively under the GPU budget. Stage~1 alone, as expected, learns to
-approach and kick but not to steer ($81^\circ$ angle error).
+to tune extensively under the GPU budget. The small remaining edge of the
+two-stage curriculum may not be meaningful: the Stage~2-only run was trained
+$15$k steps fewer than the curriculum, so part of the gap could simply reflect
+the shorter training rather than the curriculum itself. Stage~1 alone, as
+expected, learns to approach and kick but not to steer ($81^\circ$ angle
+error).
+
+\Cref{fig:curves} shows test return for the two regimes. The curriculum
+(Stage~1 $\approx$ 10k iters $\rightarrow$ Stage~2 $\approx$ 30k iters) peaks
+around a return of $465$, while Stage~2-only ($\approx$ 25k iters) peaks around
+$450$ but starts from a much lower return and climbs more steeply once it
+discovers ball contact. We also trained the policy on the Unitree G1 in Newton;
+training was less stable but reached a peak return of $448$ against a
+theoretical maximum of $600$.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{phase12_humanoid_training.png}
+\hfill
+\includegraphics[width=0.49\linewidth]{phase2_only_humanoid_training.png}
+\caption{Humanoid test return. Left: two-stage curriculum. Right: Stage~2 only.
+Both converge to a similar final return.}
+\label{fig:curves}
+\end{figure}
 
 \subsubsection{AMP vs.\ no AMP}
 \label{sec:ablation-amp}
 To isolate the contribution of the adversarial style prior, we compare our full
-model against a \emph{no-AMP} baseline that is identical in every respect ---
-same environment, network, optimizer, and Stage-2 task reward --- except that
+model against a \emph{no-AMP} baseline that is identical in every respect
+(same environment, network, optimizer, and Stage-2 task reward) except that
 the style (discriminator) reward is removed by setting
 $(w_\text{task}, w_\text{style}) = (1.0, 0.0)$. Both are trained from scratch on
 the Stage-2 dribbling task. \Cref{tab:amp-ablation} reports the task-tracking
-metrics for both models.
+metrics for both models, and \cref{fig:no_amp_curve} shows the no-AMP test
+return over training.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.6\linewidth]{no_amp_humanoid_training.png}
+\caption{Test return for the no-AMP baseline (task reward only), trained from
+scratch on the Stage-2 dribbling task.}
+\label{fig:no_amp_curve}
+\end{figure}
+
+Without the style reward to satisfy, the task reward rises much more quickly:
+the no-AMP baseline learns to effectively dribble far sooner (around step
+$2000$) than the AMP policy. The resulting gait, however, is very unhuman-like.
 
 \begin{table}[t]
 \centering
@@ -399,47 +450,34 @@ AMP (ours)    & TODO & TODO & TODO \\
 \end{tabular}
 \end{table}
 
-% TODO: discuss the expected pattern once results are in: no-AMP may match or
-% slightly beat AMP on raw task error while scoring far lower on style and
-% producing visibly unnatural, "cheating" gaits (see Fig.~\ref{fig:no_amp_rollout}).
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{comparison_amp.png}
+\caption{Preliminary per-metric comparison of the AMP and no-AMP policies on the
+Stage-2 dribbling task. The two are comparable on speed error while AMP tracks
+the commanded direction better, despite also being constrained to a natural
+gait.}
+\label{fig:comparison_amp}
+\end{figure}
+
+% TODO: discuss the pattern once final results are in (see Fig.~\ref{fig:comparison_amp}).
 \Cref{fig:no_amp_rollout} shows a representative no-AMP rollout for qualitative
 comparison against the AMP results in
 \cref{fig:humanoid_rollout,fig:g1_rollout}.
 
 \begin{figure}[t]
 \centering
-% TODO: add no_amp_rollout.png to report/figures/ once the run is trained.
-% \includegraphics[width=0.85\linewidth]{no_amp_rollout.png}
-\caption{No-AMP rollout (task reward only). % TODO: describe the unnatural gait
-relative to the AMP policy.}
+\includegraphics[width=0.85\linewidth]{no_amp_rollout.png}
+\caption{No-AMP rollout (task reward only). Green: current ball velocity; red:
+commanded target velocity. The policy dribbles effectively but adopts a
+crouched, unnatural gait.}
 \label{fig:no_amp_rollout}
-\end{figure}
-
-\subsection{Training curves}
-\Cref{fig:curves} shows test return for the two regimes. The curriculum
-(Stage~1 $\approx$ 10k iters $\rightarrow$ Stage~2 $\approx$ 30k iters) peaks
-around a return of $465$, while Stage~2-only ($\approx$ 25k iters) peaks around
-$450$ but starts from a much lower return and climbs more steeply once it
-discovers ball contact. We also trained the policy on the Unitree G1 in Newton;
-training was less stable (one run dropped sharply near iteration $2200$ before
-recovering) but reached a peak return of $448$ against a theoretical maximum of
-$600$.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.49\linewidth]{phase12_humanoid_training.png}
-\hfill
-\includegraphics[width=0.49\linewidth]{phase2_only_humanoid_training.png}
-\caption{Humanoid test return. Left: two-stage curriculum. Right: Stage~2 only.
-Both converge to a similar final return.}
-\label{fig:curves}
 \end{figure}
 
 \subsection{Qualitative results}
 \Cref{fig:humanoid_rollout,fig:g1_rollout} show representative rollouts on the
-generic humanoid and the Unitree G1. In both, the green arrow is the current
-ball velocity and the red arrow is the commanded target velocity; their close
-alignment indicates successful velocity-conditioned dribbling.
+generic humanoid and the Unitree G1. Please see the suplementary videos for more examples. 
+Overall, both the G1 and generic humanoid policies were able to learn very human-like dribbling patterns.
 
 \begin{figure}[t]
 \centering
@@ -478,7 +516,7 @@ discriminator instead of hand-crafted penalties. The resulting policies track
 commanded ball velocities while remaining visually natural, on both a generic
 humanoid and the Unitree G1. Our ablation shows that, in this AMP-based setup,
 the two-stage curriculum gives only a marginal improvement over training the
-full reward directly --- a useful negative result given the cost of the extra
+full reward directly, a useful negative result given the cost of the extra
 stage.
 
 \paragraph{Limitations.}
