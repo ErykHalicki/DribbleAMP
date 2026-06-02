@@ -2,7 +2,6 @@
 #SBATCH --account=digital_human_jobs
 #SBATCH --time=48:00:00
 #SBATCH --gpus=5060ti:1
-#SBATCH --cpus-per-gpu=16
 #SBATCH --mem=24G
 
 # No-AMP ablation. Identical setup to the phase-2-from-scratch run
