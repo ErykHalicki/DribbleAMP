@@ -1,16 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 
-# Pull the three soccer model variants from the cluster, run eval_soccer.py
-# on each, and produce a comparison bar chart.
+# Pull soccer model variants from the cluster, run eval_soccer.py on each,
+# and produce a comparison bar chart.
 #
-# Variants:
-#   phase1         -> "Phase 1 only"          (locomotion only)
-#   phase2_scratch -> "Phase 2 only"          (single-stage baseline)
-#   phase2         -> "Phase 1 + Phase 2"     (two-stage final)
+# Modes (MODE env var, default "phases"):
+#   phases -> three-way phase comparison:
+#       phase1                -> "Phase 1 only"        (locomotion only)
+#       phase2_scratch        -> "Phase 2 only"        (single-stage baseline)
+#       phase2                -> "Phase 1 + Phase 2"   (two-stage final)
+#   amp    -> AMP ablation, phase-2-from-scratch with vs without AMP:
+#       phase2_scratch        -> "Phase 2 (AMP)"       (adversarial style prior)
+#       phase2_scratch_no_amp -> "Phase 2 (no AMP)"    (pure task reward)
 #
 # Usage:
 #   scripts/compare_phases.sh
+#   MODE=amp scripts/compare_phases.sh
 #   STEPS=2000 NUM_ENVS=8 scripts/compare_phases.sh
 
 REMOTE_HOST=ehalicki@student-cluster.inf.ethz.ch
@@ -23,6 +28,14 @@ mkdir -p "${EVAL_DIR}"
 STEPS="${STEPS:-2000}"
 NUM_ENVS="${NUM_ENVS:-8}"
 ENV_CONFIG="${ENV_CONFIG:-data/envs/amp_soccer_humanoid_env_phase2.yaml}"
+MODE="${MODE:-phases}"
+
+case "${MODE}" in
+    phases) FILTERS=(phase1 phase2_scratch phase2) ;;
+    amp)    FILTERS=(phase2_scratch phase2_scratch_no_amp) ;;
+    *)      echo "ERROR: unknown MODE '${MODE}' (expected 'phases' or 'amp')" >&2; exit 1 ;;
+esac
+echo "Mode: ${MODE} -> variants: ${FILTERS[*]}"
 
 if [ -z "${DEVICE:-}" ]; then
     if (cd "${SCRIPT_DIR}" && .venv/bin/python -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null); then
@@ -52,12 +65,16 @@ declare -A LABELS=(
     [phase1]="Phase 1 only"
     [phase2_scratch]="Phase 2 only"
     [phase2]="Phase 1 + Phase 2"
+    [phase2_scratch_no_amp]="Phase 2 (no AMP)"
 )
+if [ "${MODE}" = "amp" ]; then
+    LABELS[phase2_scratch]="Phase 2 (AMP)"
+fi
 
 CSVS=()
 TAGS=()
 
-for filter in phase1 phase2_scratch phase2; do
+for filter in "${FILTERS[@]}"; do
     echo
     echo "=== ${LABELS[$filter]} (${filter}) ==="
     remote_model=$(resolve_remote_model "${filter}")
@@ -91,11 +108,13 @@ unset SSHPASS
 
 echo
 echo "=== Plotting comparison ==="
+PLOT_ARGS=()
+for i in "${!FILTERS[@]}"; do
+    PLOT_ARGS+=(--csv "${CSVS[$i]}" --label "${LABELS[${FILTERS[$i]}]}")
+done
 (
     cd "${SCRIPT_DIR}"
     .venv/bin/python scripts/plot_phase_comparison.py \
-        --csv "${CSVS[0]}" --label "${LABELS[phase1]}" \
-        --csv "${CSVS[1]}" --label "${LABELS[phase2_scratch]}" \
-        --csv "${CSVS[2]}" --label "${LABELS[phase2]}" \
-        --out "${EVAL_DIR}/comparison.png"
+        "${PLOT_ARGS[@]}" \
+        --out "${EVAL_DIR}/comparison_${MODE}.png"
 )
