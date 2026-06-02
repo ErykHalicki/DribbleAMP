@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=digital_human_jobs
-#SBATCH --time=48:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gpus=5060ti:1
 #SBATCH --mem=24G
 
