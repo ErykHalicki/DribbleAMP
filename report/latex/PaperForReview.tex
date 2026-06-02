@@ -151,17 +151,17 @@ goal.
 
 \paragraph{Simulation \& frameworks.}
 We build on MimicKit~\cite{mimickit2025}, an open-source imitation-plus-RL
-framework that supports AMP and the Unitree G1 on Isaac Gym and Isaac Lab; we
-add our task on top of it. We train with massively parallel GPU simulation
-(Newton, and Isaac Gym~\cite{makoviychuk2021isaacgym}-style throughput) using
-PPO~\cite{schulman2017ppo} as the RL optimizer.
+framework that supports AMP and the Unitree G1 natively. We
+add our task on top of it, following the conventions used in the included environemnts. 
+We train with a highly parallelized GPU simulation in the Newton simulator. Following AMP,
+we use PPO as our RL algorithn.
 
 
 \section{Method}
 \label{sec:method}
 
 \subsection{Preliminaries: AMP}
-We adopt the AMP formulation~\cite{peng2021amp}: the agent maximizes a convex
+We adopt the AMP formulation~\cite{peng2021amp}: the agent maximizes a 
 combination of a task (goal) reward $r_\text{task}$ and a learned style reward
 $r_\text{style}$,
 \begin{equation}
@@ -183,6 +183,45 @@ random intervals (every $4$--$7$\,s) during an episode. The policy observes, in
 the character's heading frame, proprioception plus the local ball position and
 velocity and the target direction and speed, appended to the standard AMP
 observation.
+
+Concretely, the observation has two parts. The \emph{proprioceptive} part
+($189$-d for the humanoid) is the standard AMP character state expressed in the
+root's heading frame: root height; root orientation, linear velocity, and
+angular velocity; per-joint rotations (each as a $6$-d tangent--normal vector)
+and joint velocities; and the positions of five key bodies (head, hands, feet).
+The \emph{task} part ($9$-d) appends the ball's position and velocity ($6$-d),
+the target direction $\hat{\mathbf{d}}^*$ ($2$-d), and the target speed $s^*$
+($1$-d), all in the heading frame. Concatenating the two gives a $198$-d
+observation for the humanoid (the G1's proprioceptive size differs with its
+joint count).
+
+\subsection{Policy and value networks}
+\label{sec:network}
+The policy (actor) and value (critic) are separate fully connected networks,
+each mapping the $198$-d observation through two hidden layers of $1024$ and
+$512$ units with ReLU activations. The critic outputs a single scalar state
+value. The actor outputs the parameters of a diagonal Gaussian over the $23$
+action dimensions, one per actuated joint (the root free-joint is not
+actuated); the mean comes from the network and the standard deviation is fixed
+at $\sigma = 0.05$ for exploration. Actions are interpreted as PD position
+targets that are tracked by joint-level PD controllers in simulation. The same
+architecture is used for both the humanoid and the G1, differing only in input
+and output dimensionality.
+
+\subsection{Discriminator}
+\label{sec:disc}
+The AMP discriminator shares the same $1024$--$512$ ReLU body and outputs a
+single scalar logit. Its input is a window of $10$ consecutive proprioceptive
+frames in the heading frame (root state, per-joint rotations, and key-body
+positions); the ball and target observations are excluded, so the
+discriminator critiques only how the body moves, not the task. The logit $D$ is
+mapped to the style reward
+\begin{equation}
+    r_\text{style} = -\log\!\bigl(\max(1 - \sigma(D),\, 10^{-4})\bigr),
+\end{equation}
+where $\sigma(\cdot)$ is the sigmoid. The discriminator is trained with a binary
+cross-entropy objective (reference clips vs.\ policy rollouts) plus a gradient
+penalty, following AMP~\cite{peng2021amp}.
 
 \subsection{Reward formalization}
 \label{sec:reward}
@@ -277,10 +316,8 @@ Phase & $w_s$ & $w_d$ & $w_r$ & $\sigma_s$ & $\sigma_r$ \\
 \subsection{Setup}
 We train with the Newton GPU backend using $1024$ parallel environments and the
 AMP/PPO agent from MimicKit. The style dataset is the retargeted locomotion
-clips (no dribbling clips). Episodes last $60$\,s in Stage~1 and $20$\,s in
-Stage~2. Training is expensive: a single configuration needs roughly $12$--$24$
-hours to reveal whether it worked, and with a budget of about $150$ GPU-hours
-per person we could not run full hyper-parameter sweeps.
+clips (no dribbling clips). Episodes last $60$\,s in both stages. Each training
+run took roughly $24$ hours on an RTX 5060 Ti.
 
 \subsection{Evaluation metrics}
 We measure, over evaluation episodes: (i) \emph{speed error}
@@ -289,7 +326,10 @@ ball velocity and the target direction (deg); (iii) \emph{character--ball
 distance} (m); and (iv) mean test return during training. We also assess gait
 naturalness qualitatively from rollout videos.
 
-\subsection{Main comparison: does the curriculum help?}
+\subsection{Ablations}
+We run two ablations: (1) the two-stage curriculum, and (2) the AMP style prior.
+
+\subsubsection{Phase 1+2 vs.\ Phase 2 only}
 We compare three training schemes evaluated on the Stage-2 dribbling task:
 \emph{Stage~1 only}, \emph{Stage~2 only} (trained from scratch on the full
 reward), and \emph{Stage~1\,+\,Stage~2} (our curriculum).
@@ -314,14 +354,14 @@ Stage 1 + Stage 2   & \textbf{0.732} & \textbf{19.52} & \textbf{0.588} \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\linewidth]{comparison.png}
+\includegraphics[width=0.8\linewidth]{comparison.png}
 \caption{Per-metric comparison of the three training schemes. Stage~1 only has a
 very large angle error ($81^\circ$) since it is never rewarded for direction;
 Stage~2-only and the full two-stage curriculum are essentially tied.}
 \label{fig:comparison}
-\end{figure}
+\end{figure*}
 
 The headline finding is that the two-stage curriculum does \emph{not}
 meaningfully outperform training Stage~2 from scratch: angle error drops only
@@ -332,7 +372,7 @@ regularizing the policy toward sensible locomotion, and partly to our inability
 to tune extensively under the GPU budget. Stage~1 alone, as expected, learns to
 approach and kick but not to steer ($81^\circ$ angle error).
 
-\subsection{Ablation: AMP vs.\ no AMP}
+\subsubsection{AMP vs.\ no AMP}
 \label{sec:ablation-amp}
 To isolate the contribution of the adversarial style prior, we compare our full
 model against a \emph{no-AMP} baseline that is identical in every respect ---
@@ -340,24 +380,21 @@ same environment, network, optimizer, and Stage-2 task reward --- except that
 the style (discriminator) reward is removed by setting
 $(w_\text{task}, w_\text{style}) = (1.0, 0.0)$. Both are trained from scratch on
 the Stage-2 dribbling task. \Cref{tab:amp-ablation} reports the task-tracking
-metrics together with a \emph{style score}: the average discriminator output on
-each policy's motion, where higher means the locomotion looks more like the
-reference clips.
+metrics for both models.
 
 \begin{table}[t]
 \centering
-\caption{AMP vs.\ no-AMP, both trained from scratch on the Stage-2 task. The
-style score is the discriminator's mean output on the policy's motion (higher =
-more natural). % TODO: fill in numbers once the no-AMP run finishes.
+\caption{AMP vs.\ no-AMP, both trained from scratch on the Stage-2 task.
+% TODO: fill in numbers once the no-AMP run finishes.
 }
 \label{tab:amp-ablation}
-\begin{tabular}{lcccc}
+\begin{tabular}{lccc}
 \toprule
-Model & Speed err.\ & Angle err.\ & Char--ball & Style \\
-      & (m/s)       & (deg)       & dist.\ (m) & score \\
+Model & Speed err.\ & Angle err.\ & Char--ball \\
+      & (m/s)       & (deg)       & dist.\ (m) \\
 \midrule
-No AMP        & TODO & TODO & TODO & TODO \\
-AMP (ours)    & TODO & TODO & TODO & TODO \\
+No AMP        & TODO & TODO & TODO \\
+AMP (ours)    & TODO & TODO & TODO \\
 \bottomrule
 \end{tabular}
 \end{table}

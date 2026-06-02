@@ -6,6 +6,7 @@ set -euo pipefail
 #   scripts/sync_model.bash phase1         # latest phase1 run
 #   scripts/sync_model.bash phase2         # latest 2-phase run
 #   scripts/sync_model.bash phase2_scratch # latest 1-phase baseline
+#   scripts/sync_model.bash phase2_scratch_no_amp  # latest no-AMP ablation
 #   scripts/sync_model.bash phase2_20260524_141200  # specific run dir
 #   RUN=<filter> scripts/sync_model.bash   # same as positional arg
 #   REMOTE_MODEL=<full/remote/path> scripts/sync_model.bash  # exact file
@@ -65,12 +66,15 @@ unset SSHPASS
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 python "${SCRIPT_DIR}/scripts/plot_log.py" output/log.txt
 
-if [[ "${REMOTE_MODEL}" == *soccer_phase2* ]]; then
-    export ENV_CONFIG=data/envs/amp_soccer_humanoid_env_phase2.yaml
-    echo "Testing with phase 2 env config"
+# Pick the soccer_test.sh MODE preset from the run name. Check no_amp before
+# phase2, since the no-AMP run dir name also contains "phase2".
+if [[ "${REMOTE_MODEL}" == *soccer_phase2_scratch_no_amp* ]]; then
+    export MODE=no_amp
+elif [[ "${REMOTE_MODEL}" == *soccer_phase2* ]]; then
+    export MODE=phase2
 else
-    export ENV_CONFIG=data/envs/amp_soccer_humanoid_env_phase1.yaml
-    echo "Testing with phase 1 env config"
+    export MODE=phase1
 fi
+echo "Testing with MODE=${MODE}"
 
 bash "${SCRIPT_DIR}/scripts/soccer_test.sh"
