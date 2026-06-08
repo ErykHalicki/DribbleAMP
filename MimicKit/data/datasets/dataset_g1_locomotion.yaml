@@ -1,6 +1,6 @@
 motions:
   - file: "data/motions/g1/g1_walk.pkl"
-    weight: 2.0
+    weight: 1.0
   - file: "data/motions/g1/g1_run.pkl"
     weight: 2.0
   - file: "data/motions/g1/g1_kick_combo.pkl"
