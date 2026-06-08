@@ -52,11 +52,11 @@
 \title{DribbleAMP: Adversarial Motion Priors for Football Dribbling}
 
 \author{Eryk Halicki\\
-ETH Z\"urich\\
-{\tt\small ehalicki@ethz.ch}
+University of British Columbia, ETH Z\"urich\\
+{\tt\small ehalicki@student.ubc.ca}
 \and
 Jay Janaskar\\
-ETH Z\"urich\\
+Norwegian University of Science and Technology, ETH Z\"urich\\
 {\tt\small jjanaskar@ethz.ch}
 }
 \maketitle
@@ -93,10 +93,10 @@ world, and dribbling has a direct application in RoboCup-style humanoid soccer.
 \paragraph{Why existing methods fall short.}
 Pure task-reward RL can move the ball but tends to produce unnatural,
 energy-inefficient gaits. Motion-tracking methods such as
-DeepMimic~\cite{peng2018deepmimic} reproduce reference clips faithfully but
+DeepMimic~\cite{2018-TOG-deepMimic} reproduce reference clips faithfully but
 require a motion that already \emph{contains} the dribble, which is hard to
 capture and does not generalize to arbitrary commanded directions. The closest
-prior work, DribbleMaster~\cite{dribblemaster}, achieves strong sim-to-real
+prior work, DribbleMaster~\cite{wang2025dribble}, achieves strong sim-to-real
 dribbling but relies on hand-crafted style penalties (torso tilt, a gait clock,
 reference tracking) and is not open-sourced.
 
@@ -116,7 +116,7 @@ approach and kick the ball'' from ``learn to steer it,'' yielding natural gaits
     humanoid and the Unitree G1.
     \item A two-phase chase-then-dribble curriculum (\cref{sec:curriculum}) and
     an ablation measuring how much it actually helps.
-    \item An open-source implementation on top of MimicKit~\cite{mimickit2025}
+    \item An open-source implementation on top of MimicKit~\cite{MimicKitPeng2025}
     with the Newton GPU backend, with reward-design and training-budget lessons.
 \end{enumerate}
 
@@ -127,7 +127,7 @@ approach and kick the ball'' from ``learn to steer it,'' yielding natural gaits
 
 % --- OUTLINE: group by topic, end each group with how we differ. ---
 \paragraph{Motion imitation for physics-based control.}
-DeepMimic~\cite{peng2018deepmimic} and follow-ups track reference clips with a
+DeepMimic~\cite{2018-TOG-deepMimic} and follow-ups track reference clips with a
 phase-indexed tracking reward. They produce high-quality motion but require a
 reference that already demonstrates the target skill. We instead need a
 \emph{skill not present} in any clip (ball dribbling), so direct imitation does
@@ -141,7 +141,7 @@ only the goal. We use AMP as our backbone and contribute the task definition,
 reward, and curriculum on top of it.
 
 \paragraph{Learning to dribble.}
-DribbleMaster~\cite{dribblemaster} learns RL humanoid dribbling with sim-to-real
+DribbleMaster~\cite{wang2025dribble} learns RL humanoid dribbling with sim-to-real
 transfer using hand-crafted style penalties and a two-stage curriculum, with
 strong results, but its code is not open-sourced, which limits direct
 comparison. We reuse its task-reward blueprint but obtain style from an AMP
@@ -150,11 +150,11 @@ discriminator instead of hand-designed penalties, and target a
 goal.
 
 \paragraph{Simulation \& frameworks.}
-We build on MimicKit~\cite{mimickit2025}, an open-source imitation-plus-RL
+We build on MimicKit~\cite{MimicKitPeng2025}, an open-source imitation-plus-RL
 framework that supports AMP and the Unitree G1 natively. We
-add our task on top of it, following the conventions used in the included environemnts. 
+add our task on top of it, following the conventions used in the included environments. 
 We train with a highly parallelized GPU simulation in the Newton simulator. Following AMP,
-we use PPO as our RL algorithn.
+we use PPO as our RL algorithm.
 
 
 \section{Method}
@@ -372,7 +372,7 @@ Stage 1 + Stage 2   & \textbf{0.732} & \textbf{19.52} & \textbf{0.588} \\
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.8\linewidth]{comparison.png}
+\includegraphics[width=\linewidth]{comparison.png}
 \caption{Per-metric comparison of the three training schemes. Stage~1 only has a
 very large angle error ($81^\circ$) since it is never rewarded for direction;
 Stage~2-only and the full two-stage curriculum are essentially tied.}
@@ -431,34 +431,40 @@ scratch on the Stage-2 dribbling task.}
 
 Without the style reward to satisfy, the task reward rises much more quickly:
 the no-AMP baseline learns to effectively dribble far sooner (around step
-$2000$) than the AMP policy. The resulting gait, however, is very unhuman-like.
+$2000$) than the AMP policy. For the same training budget, this translates into
+significantly better task tracking: as \cref{tab:amp-ablation} shows, the no-AMP
+baseline roughly halves both the speed error ($0.390$ vs.\ $0.771$\,m/s) and the
+angle error ($9.02^\circ$ vs.\ $18.54^\circ$) and stays closer to the ball
+($0.453$ vs.\ $0.645$\,m), beating AMP on all three metrics. This is expected:
+freed from having to match the style prior, the policy can spend its entire
+capacity and training budget on the task. The resulting gait, however, is very
+unhuman-like.
 
 \begin{table}[t]
 \centering
-\caption{AMP vs.\ no-AMP, both trained from scratch on the Stage-2 task.
-% TODO: fill in numbers once the no-AMP run finishes.
-}
+\caption{AMP vs.\ no-AMP, both trained from scratch on the Stage-2 task
+(lower is better).}
 \label{tab:amp-ablation}
 \begin{tabular}{lccc}
 \toprule
 Model & Speed err.\ & Angle err.\ & Char--ball \\
       & (m/s)       & (deg)       & dist.\ (m) \\
 \midrule
-No AMP        & TODO & TODO & TODO \\
-AMP (ours)    & TODO & TODO & TODO \\
+No AMP        & \textbf{0.390} & \textbf{9.02} & \textbf{0.453} \\
+AMP (ours)    & 0.771 & 18.54 & 0.645 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
 \includegraphics[width=\linewidth]{comparison_amp.png}
-\caption{Preliminary per-metric comparison of the AMP and no-AMP policies on the
-Stage-2 dribbling task. The two are comparable on speed error while AMP tracks
-the commanded direction better, despite also being constrained to a natural
-gait.}
+\caption{Per-metric comparison of the AMP and no-AMP policies on the Stage-2
+dribbling task. For an equal training budget the no-AMP baseline is
+significantly better on every metric, since it is not constrained to a natural
+gait and can devote all of its capacity to the task.}
 \label{fig:comparison_amp}
-\end{figure}
+\end{figure*}
 
 % TODO: discuss the pattern once final results are in (see Fig.~\ref{fig:comparison_amp}).
 \Cref{fig:no_amp_rollout} shows a representative no-AMP rollout for qualitative
@@ -517,7 +523,13 @@ commanded ball velocities while remaining visually natural, on both a generic
 humanoid and the Unitree G1. Our ablation shows that, in this AMP-based setup,
 the two-stage curriculum gives only a marginal improvement over training the
 full reward directly, a useful negative result given the cost of the extra
-stage.
+stage. We also find a clear tension between task performance and style: for an
+equal training budget, the no-AMP baseline is substantially better at the task,
+roughly halving both speed and angle error and staying closer to the ball
+(\cref{tab:amp-ablation}). The style discriminator pulls the policy toward a
+clean walking gait, which competes with the contact-rich motion dribbling
+requires, so the style reward buys natural locomotion at a measurable cost in
+tracking accuracy.
 
 \paragraph{Limitations.}
 We evaluate a single ball on flat ground with no opponents, and steering is
@@ -525,11 +537,21 @@ velocity-conditioned only. All results are in simulation; we did not perform
 sim-to-real transfer. Limited GPU budget prevented systematic reward tuning.
 
 \paragraph{Future work.}
-Promising directions include a vision-based, end-to-end policy that replaces the
-oracle ball position with visual input (currently limited by MimicKit's lack of
-support for CNN/Transformer policies), sim-to-real transfer to real G1 hardware,
-a controlled baseline against DribbleMaster should its code be released, and
-retargeting motion clips from real soccer players to improve dribbling style.
+A central direction is to better balance the task and style rewards so that the
+naturalness of AMP can be recovered without sacrificing the task performance the
+no-AMP baseline demonstrates is achievable. Rather than a fixed
+$(w_\text{task}, w_\text{style})$ split, future work could anneal the weights
+over training: start style-heavy so the agent first acquires a natural,
+well-regularized gait, then gradually shift weight toward the task so it can
+specialize that gait for the contact-rich demands of dribbling. The style prior
+could also be adapted online to hold the discriminator near a target accuracy.
+Retargeting motion clips from real soccer players would further give the
+discriminator a style closer to the contact-rich gait the task needs, likely
+shrinking the gap. Other promising directions include a vision-based,
+end-to-end policy that replaces the oracle ball position with visual input
+(currently limited by MimicKit's lack of support for CNN/Transformer policies),
+sim-to-real transfer to real G1 hardware, and a controlled baseline against
+DribbleMaster should its code be released.
 
 \section{Contributions of team members}
 Both authors contributed to report writing, the presentation, and model training
