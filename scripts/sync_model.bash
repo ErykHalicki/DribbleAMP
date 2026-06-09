@@ -77,4 +77,4 @@ else
 fi
 echo "Testing with MODE=${MODE}"
 
-bash "${SCRIPT_DIR}/scripts/soccer_test.sh"
+MODEL_FILE="${SCRIPT_DIR}/output/model.pt" bash "${SCRIPT_DIR}/scripts/soccer_test.sh"

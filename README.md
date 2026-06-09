@@ -72,8 +72,53 @@ module add cuda/13.0
 ```
 
 Edit these lines in each script to point at your own conda env, or replace
-them with `source .venv/bin/activate` if you used a venv (Newton scripts only
-&mdash; Isaac Lab needs conda because of Omniverse).
+them with `source .venv/bin/activate` if you used a venv (Newton scripts only; Isaac Lab needs conda because of Omniverse).
+
+## Running the paper demos (pretrained models)
+
+The checkpoints behind every result in the paper are included in the repo
+under `models/`:
+
+| File | Policy | Paper result |
+|------|--------|--------------|
+| `humanoid_stage1.pt`        | Humanoid, Stage 1 only (chase + kick) | curriculum ablation |
+| `humanoid_stage1_stage2.pt` | Humanoid, Stage 1 + Stage 2 (ours)    | main result |
+| `humanoid_stage2_only.pt`   | Humanoid, Stage 2 from scratch        | curriculum ablation |
+| `humanoid_no_amp.pt`        | Humanoid, task reward only            | AMP ablation |
+| `g1_stage1.pt`              | Unitree G1, Stage 1                   | G1 chase demo |
+| `g1_stage2.pt`              | Unitree G1, Stage 2                   | G1 dribble demo |
+
+`scripts/soccer_test.sh` opens an interactive Newton viewer (CPU, no GPU or
+cluster needed — just the venv from [Setup](#setup)). Each `MODE` preset picks
+the matching env + agent configs and defaults to the corresponding checkpoint
+above:
+
+```bash
+# Humanoid, full two-stage curriculum (our main result)
+MODE=phase2 scripts/soccer_test.sh
+
+# Humanoid ablations
+MODE=phase1 scripts/soccer_test.sh   # Stage 1 only: approaches + kicks, can't steer
+MODE=no_amp scripts/soccer_test.sh   # no style prior: dribbles well, unnatural gait
+
+# Unitree G1
+MODE=g1_phase1 scripts/soccer_test.sh
+MODE=g1_phase2 scripts/soccer_test.sh
+```
+
+To run a different checkpoint with the same configs, pass `MODEL_FILE`
+explicitly — e.g. the Stage-2-only ablation reuses the `phase2` configs:
+
+```bash
+MODE=phase2 MODEL_FILE=$PWD/models/humanoid_stage2_only.pt scripts/soccer_test.sh
+```
+
+To re-fetch all of the above from the training cluster (team members only;
+prompts once for your cluster password):
+
+```bash
+scripts/download_paper_models.bash
+```
 
 ## Training
 
@@ -127,7 +172,10 @@ MimicKit/                       # vendored fork of MimicKit
   data/datasets/dataset_g1_locomotion.yaml  # AMP demo motion list
   mimickit/envs/task_soccer_env.py          # soccer task + reward
   mimickit/engines/newton_engine.py         # Newton bindings (+ patches)
+models/                                     # pretrained paper checkpoints
 scripts/                                    # SLURM train + test scripts
+  soccer_test.sh                            # local interactive demo viewer
+  download_paper_models.bash                # re-fetch models/ from the cluster
 ```
 
 ## Citation / references
