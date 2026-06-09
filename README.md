@@ -16,8 +16,16 @@ Course project for ETH Z&uuml;rich's Digital Humans (Eryk Halicki, Jay Janaskar)
 - **Stage 2 (dribble)** — G1 follows a commanded ball velocity:
   https://youtu.be/H7UHbeMz4UI
 
-In the videos, the **red arrow** is the commanded ball velocity and the
-**green arrow** is the actual ball velocity.
+In the videos and images, the **red arrow** is the commanded ball velocity and
+the **green arrow** is the actual ball velocity.
+
+<p align="center">
+  <img src="report/figures/humanoid_rollout.png" alt="Humanoid dribbling rollout" width="58%">
+  <img src="report/figures/g1_rollout.png" alt="Unitree G1 dribbling rollout" width="35%">
+</p>
+<p align="center">
+  <em>Dribbling rollouts on the generic humanoid (left) and the Unitree G1 (right).</em>
+</p>
 
 ## Method (TL;DR)
 
@@ -37,6 +45,29 @@ Two-stage curriculum:
 
 The AMP discriminator is trained on the locomotion clips (walk + run) shipped
 with MimicKit — no dribbling reference motion is needed.
+
+## Results
+
+**Curriculum ablation.** Stage 1 alone never learns to steer the ball
+(81° angle error); training Stage 2 from scratch is nearly indistinguishable
+from the full two-stage curriculum — a useful negative result given the cost
+of the extra stage.
+
+![Curriculum ablation: Stage 1 only vs Stage 2 only vs Stage 1+2](report/figures/comparison.png)
+
+**AMP ablation.** Dropping the style reward roughly halves all tracking errors
+for the same training budget — but the resulting gait is crouched and very
+unhuman-like (below). The style prior buys natural locomotion at a measurable
+cost in task performance.
+
+![AMP vs no-AMP tracking errors](report/figures/comparison_amp.png)
+
+<p align="center">
+  <img src="report/figures/no_amp_rollout.png" alt="No-AMP rollout with crouched, unnatural gait" width="50%">
+</p>
+<p align="center">
+  <em>The no-AMP baseline dribbles effectively but adopts a crouched, unnatural gait.</em>
+</p>
 
 
 ## Setup
