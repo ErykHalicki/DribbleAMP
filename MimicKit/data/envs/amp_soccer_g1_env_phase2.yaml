@@ -3,7 +3,7 @@ env_name: "task_soccer"
 char_file: "data/assets/g1/g1.xml"
 camera_mode: "track"
 
-episode_length: 60.0 # seconds
+episode_length: 20.0 # seconds
 global_obs: False
 root_height_obs: True
 pose_termination: False
@@ -23,10 +23,10 @@ contact_bodies: ["left_knee_link", "left_ankle_pitch_link", "left_ankle_roll_lin
 num_projectiles: 1
 proj_target_body: "torso_link"
 
-ball_spawn_dist_min: 0.0
-ball_spawn_dist_max: 5.0
+ball_spawn_dist_min: 1.0
+ball_spawn_dist_max: 3.0
 ball_spawn_speed_min: 0.0
-ball_spawn_speed_max: 0.0
+ball_spawn_speed_max: 1.0
 
 proj_trigger_time_min: 0.0
 proj_trigger_time_max: 0.0
@@ -38,9 +38,8 @@ tar_change_time_max: 7.0
 
 motion_file: "data/datasets/dataset_g1_locomotion.yaml"
 
-# Phase 1: reward kicking the ball (any direction) + staying close. Direction weight 0.
-reward_ball_speed_w: 0.6
-reward_ball_dir_w: 0.0
-reward_ball_dist_w: 0.4
+reward_ball_speed_w: 0.3
+reward_ball_dir_w: 0.5
+reward_ball_dist_w: 0.2
 reward_ball_speed_scale: 0.2
 reward_ball_dist_scale: 0.1
